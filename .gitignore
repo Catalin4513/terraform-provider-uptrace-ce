@@ -1,0 +1,11 @@
+terraform-provider-*
+*.exe
+*.tfstate
+*.tfstate.backup
+*.log
+.terraform/
+.terraform.lock.hcl
+.terraformrc
+terraform.rc
+.tofurc
+vendor/

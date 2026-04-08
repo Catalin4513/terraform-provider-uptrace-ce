@@ -1,14 +1,11 @@
 package provider
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
-	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -26,18 +23,13 @@ var (
 	_ resource.ResourceWithImportState = &OrgResource{}
 )
 
-// NewOrgResource creates the org resource.
-func NewOrgResource() resource.Resource {
-	return &OrgResource{}
-}
-
 // OrgResource manages an Uptrace organization.
 type OrgResource struct {
 	client *Client
 }
 
-// OrgResourceModel describes the Terraform state for an organization.
-type OrgResourceModel struct {
+// orgModel maps the Terraform state for an organization.
+type orgModel struct {
 	ID        types.String  `tfsdk:"id"`
 	Name      types.String  `tfsdk:"name"`
 	Budget    types.Float64 `tfsdk:"budget"`
@@ -45,240 +37,194 @@ type OrgResourceModel struct {
 	UpdatedAt types.String  `tfsdk:"updated_at"`
 }
 
-// apiOrg is the JSON shape returned by the Uptrace API.
+// apiOrg mirrors the JSON representation returned by the Uptrace API.
 type apiOrg struct {
 	ID        int64   `json:"id"`
 	Name      string  `json:"name"`
 	Budget    float64 `json:"budget"`
-	CreatedAt string  `json:"createdAt"`
-	UpdatedAt string  `json:"updatedAt"`
+	CreatedAt float64 `json:"createdAt"`
+	UpdatedAt float64 `json:"updatedAt"`
 }
 
+// NewOrgResource returns a new org resource instance.
+func NewOrgResource() resource.Resource {
+	return &OrgResource{}
+}
+
+// Metadata sets the resource type name.
 func (r *OrgResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_org"
 }
 
+// Schema defines the org resource attributes.
 func (r *OrgResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages an Uptrace organization.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Description: "Organization identifier.",
-				Computed:    true,
+				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"name": schema.StringAttribute{
-				Description: "Organization name.",
-				Required:    true,
+				Required: true,
 			},
 			"budget": schema.Float64Attribute{
-				Description: "Organization budget. Can only be set on creation.",
-				Optional:    true,
-				Computed:    true,
+				Optional: true,
+				Computed: true,
 				PlanModifiers: []planmodifier.Float64{
-					float64planmodifier.RequiresReplace(),
+					float64planmodifier.UseStateForUnknown(),
 				},
 			},
 			"created_at": schema.StringAttribute{
-				Description: "Creation timestamp.",
-				Computed:    true,
+				Computed: true,
 			},
 			"updated_at": schema.StringAttribute{
-				Description: "Last update timestamp.",
-				Computed:    true,
+				Computed: true,
 			},
 		},
 	}
 }
 
+// Configure injects the API client from provider configuration.
 func (r *OrgResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
+
 	client, ok := req.ProviderData.(*Client)
 	if !ok {
-		resp.Diagnostics.AddError("Unexpected type", fmt.Sprintf("Expected *Client, got %T", req.ProviderData))
+		resp.Diagnostics.AddError(
+			"unexpected provider data type",
+			fmt.Sprintf("expected *Client, got %T", req.ProviderData))
 		return
 	}
 	r.client = client
 }
 
-// Create sends POST /internal/v1/orgs.
+// Create creates a new organization via POST /orgs.
 func (r *OrgResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan OrgResourceModel
+	var plan orgModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	body := map[string]any{
+	in := map[string]any{
 		"name": plan.Name.ValueString(),
 	}
 	if !plan.Budget.IsNull() && !plan.Budget.IsUnknown() {
-		body["budget"] = plan.Budget.ValueFloat64()
+		in["budget"] = plan.Budget.ValueFloat64()
 	}
 
-	tflog.Info(ctx, "Creating org", map[string]any{"name": plan.Name.ValueString()})
+	tflog.Info(ctx, "creating org", map[string]any{"name": plan.Name.ValueString()})
 
-	org, err := r.doOrgRequest(ctx, http.MethodPost, "/orgs", body)
-	if err != nil {
-		resp.Diagnostics.AddError("Error Creating Organization", err.Error())
+	var out struct {
+		Org apiOrg `json:"org"`
+	}
+	if err := r.client.doJSON(ctx, http.MethodPost, "/orgs", in, &out); err != nil {
+		resp.Diagnostics.AddError("create org failed", err.Error())
 		return
 	}
 
-	orgToState(org, &plan)
+	apiOrgToModel(&out.Org, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
-// Read sends GET /internal/v1/orgs/{orgId}.
+// Read refreshes the Terraform state from the API via GET /orgs/{id}.
 func (r *OrgResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var state OrgResourceModel
+	var state orgModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	org, err := r.doOrgRequest(ctx, http.MethodGet, "/orgs/"+state.ID.ValueString(), nil)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+	var out struct {
+		Org apiOrg `json:"org"`
+	}
+	if err := r.client.doJSON(ctx, http.MethodGet, "/orgs/"+state.ID.ValueString(), nil, &out); err != nil {
+		if isNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		resp.Diagnostics.AddError("Error Reading Organization", err.Error())
+		resp.Diagnostics.AddError("read org failed", err.Error())
 		return
 	}
 
-	orgToState(org, &state)
+	apiOrgToModel(&out.Org, &state)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Update sends PUT /internal/v1/orgs/{orgId}.
+// Update modifies an existing organization via PUT /orgs/{id}.
+// Only name is updatable; budget changes trigger a replace.
 func (r *OrgResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan OrgResourceModel
+	var plan orgModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	body := map[string]any{
+	in := map[string]any{
 		"name": plan.Name.ValueString(),
 	}
 
-	tflog.Info(ctx, "Updating org", map[string]any{"id": plan.ID.ValueString()})
+	tflog.Info(ctx, "updating org", map[string]any{"id": plan.ID.ValueString()})
 
-	org, err := r.doOrgRequest(ctx, http.MethodPut, "/orgs/"+plan.ID.ValueString(), body)
-	if err != nil {
-		resp.Diagnostics.AddError("Error Updating Organization", err.Error())
+	var out struct {
+		Org apiOrg `json:"org"`
+	}
+	if err := r.client.doJSON(ctx, http.MethodPut, "/orgs/"+plan.ID.ValueString(), in, &out); err != nil {
+		resp.Diagnostics.AddError("update org failed", err.Error())
 		return
 	}
 
-	orgToState(org, &plan)
+	apiOrgToModel(&out.Org, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
-// Delete sends DELETE /internal/v1/orgs/{orgId}.
+// Delete removes an organization via DELETE /orgs/{id}.
 func (r *OrgResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var state OrgResourceModel
+	var state orgModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	tflog.Info(ctx, "Deleting org", map[string]any{"id": state.ID.ValueString()})
+	tflog.Info(ctx, "deleting org", map[string]any{"id": state.ID.ValueString()})
 
-	url := r.client.Endpoint + "/orgs/" + state.ID.ValueString()
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
-	if err != nil {
-		resp.Diagnostics.AddError("Error Deleting Organization", err.Error())
-		return
-	}
-	httpReq.Header.Set("Authorization", "Bearer "+r.client.Token)
-
-	httpResp, err := r.client.HTTP.Do(httpReq)
-	if err != nil {
-		resp.Diagnostics.AddError("Error Deleting Organization", err.Error())
-		return
-	}
-	defer httpResp.Body.Close()
-
-	if httpResp.StatusCode != http.StatusOK && httpResp.StatusCode != http.StatusNoContent {
-		bodyBytes, _ := io.ReadAll(httpResp.Body)
-		if strings.Contains(string(bodyBytes), "not found") || httpResp.StatusCode == http.StatusNotFound {
-			return
-		}
-		resp.Diagnostics.AddError("Error Deleting Organization",
-			fmt.Sprintf("status %d: %s", httpResp.StatusCode, string(bodyBytes)))
+	err := r.client.doJSON(ctx, http.MethodDelete, "/orgs/"+state.ID.ValueString(), nil, nil)
+	if err != nil && !isNotFound(err) {
+		resp.Diagnostics.AddError("delete org failed", err.Error())
 	}
 }
 
+// ImportState imports an existing org by its numeric ID.
 func (r *OrgResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-// doOrgRequest sends an HTTP request and parses the org from the response.
-func (r *OrgResource) doOrgRequest(ctx context.Context, method, urlPath string, body map[string]any) (*apiOrg, error) {
-	url := r.client.Endpoint + urlPath
-
-	var reqBody io.Reader
-	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("marshal request: %w", err)
-		}
-		reqBody = bytes.NewReader(data)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, method, url, reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	httpReq.Header.Set("Authorization", "Bearer "+r.client.Token)
-	if body != nil {
-		httpReq.Header.Set("Content-Type", "application/json")
-	}
-
-	httpResp, err := r.client.HTTP.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
-	}
-	defer httpResp.Body.Close()
-
-	respBody, err := io.ReadAll(httpResp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
-		return nil, fmt.Errorf("status %d: %s", httpResp.StatusCode, string(respBody))
-	}
-
-	var result struct {
-		Org apiOrg `json:"org"`
-	}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
-	}
-
-	return &result.Org, nil
+// milliToRFC3339 converts Unix milliseconds (as float64) to an RFC3339 string.
+func milliToRFC3339(ms float64) string {
+	sec := int64(ms / 1000)
+	nsec := int64((ms - float64(sec)*1000) * 1e6)
+	return time.Unix(sec, nsec).UTC().Format(time.RFC3339)
 }
 
-// orgToState maps API response to Terraform state.
-func orgToState(org *apiOrg, state *OrgResourceModel) {
-	state.ID = types.StringValue(strconv.FormatInt(org.ID, 10))
-	state.Name = types.StringValue(org.Name)
+// apiOrgToModel converts an API response into Terraform state.
+func apiOrgToModel(org *apiOrg, m *orgModel) {
+	m.ID = types.StringValue(strconv.FormatInt(org.ID, 10))
+	m.Name = types.StringValue(org.Name)
 
 	if org.Budget != 0 {
-		state.Budget = types.Float64Value(org.Budget)
+		m.Budget = types.Float64Value(org.Budget)
 	} else {
-		state.Budget = types.Float64Null()
+		m.Budget = types.Float64Null()
 	}
 
-	if org.CreatedAt != "" {
-		state.CreatedAt = types.StringValue(org.CreatedAt)
+	if org.CreatedAt != 0 {
+		m.CreatedAt = types.StringValue(milliToRFC3339(org.CreatedAt))
 	}
-	if org.UpdatedAt != "" {
-		state.UpdatedAt = types.StringValue(org.UpdatedAt)
+	if org.UpdatedAt != 0 {
+		m.UpdatedAt = types.StringValue(milliToRFC3339(org.UpdatedAt))
 	}
 }

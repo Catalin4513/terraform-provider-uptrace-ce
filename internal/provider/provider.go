@@ -15,97 +15,78 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// Client is a minimal HTTP client for the Uptrace API.
-type Client struct {
-	Endpoint  string
-	Token     string
-	ProjectID int64
-	HTTP      *http.Client
-}
-
-// UptraceProvider implements the Terraform provider interface.
+// UptraceProvider implements the Terraform provider for Uptrace.
 type UptraceProvider struct {
 	version string
 }
 
-// UptraceProviderModel describes the provider config.
-type UptraceProviderModel struct {
+// uptraceProviderModel maps the provider HCL config to Go types.
+type uptraceProviderModel struct {
 	Endpoint  types.String `tfsdk:"endpoint"`
 	Token     types.String `tfsdk:"token"`
 	ProjectID types.Int64  `tfsdk:"project_id"`
 }
 
-// New returns a provider constructor.
+// New returns a factory function that creates the provider.
 func New(version string) func() tfprovider.Provider {
 	return func() tfprovider.Provider {
 		return &UptraceProvider{version: version}
 	}
 }
 
+// Metadata sets the provider type name.
 func (p *UptraceProvider) Metadata(_ context.Context, _ tfprovider.MetadataRequest, resp *tfprovider.MetadataResponse) {
 	resp.TypeName = "uptrace"
 	resp.Version = p.version
 }
 
+// Schema defines the provider configuration attributes.
 func (p *UptraceProvider) Schema(_ context.Context, _ tfprovider.SchemaRequest, resp *tfprovider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Minimal Terraform provider for Uptrace.",
 		Attributes: map[string]schema.Attribute{
 			"endpoint": schema.StringAttribute{
-				Description: "Uptrace API endpoint. Can also be set via UPTRACE_ENDPOINT.",
-				Optional:    true,
+				Optional: true,
 			},
 			"token": schema.StringAttribute{
-				Description: "Uptrace API token. Can also be set via UPTRACE_TOKEN.",
-				Optional:    true,
-				Sensitive:   true,
+				Optional:  true,
+				Sensitive: true,
 			},
 			"project_id": schema.Int64Attribute{
-				Description: "Default project ID. Can also be set via UPTRACE_PROJECT_ID.",
-				Optional:    true,
+				Optional: true,
 			},
 		},
 	}
 }
 
+// Configure creates the API client from provider config and env vars.
 func (p *UptraceProvider) Configure(ctx context.Context, req tfprovider.ConfigureRequest, resp *tfprovider.ConfigureResponse) {
-	var config UptraceProviderModel
-	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	var conf uptraceProviderModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &conf)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	endpoint := os.Getenv("UPTRACE_ENDPOINT")
-	if !config.Endpoint.IsNull() {
-		endpoint = config.Endpoint.ValueString()
-	}
+	endpoint := envOrConfig("UPTRACE_ENDPOINT", conf.Endpoint)
 	if endpoint == "" {
-		resp.Diagnostics.AddAttributeError(path.Root("endpoint"), "Missing endpoint",
+		resp.Diagnostics.AddAttributeError(
+			path.Root("endpoint"), "Missing endpoint",
 			"Set endpoint in config or UPTRACE_ENDPOINT env var.")
 		return
 	}
 
-	token := os.Getenv("UPTRACE_TOKEN")
-	if !config.Token.IsNull() {
-		token = config.Token.ValueString()
-	}
+	token := envOrConfig("UPTRACE_TOKEN", conf.Token)
 	if token == "" {
-		resp.Diagnostics.AddAttributeError(path.Root("token"), "Missing token",
+		resp.Diagnostics.AddAttributeError(
+			path.Root("token"), "Missing token",
 			"Set token in config or UPTRACE_TOKEN env var.")
 		return
 	}
 
-	var projectID int64
-	if !config.ProjectID.IsNull() {
-		projectID = config.ProjectID.ValueInt64()
-	} else if env := os.Getenv("UPTRACE_PROJECT_ID"); env != "" {
-		var err error
-		projectID, err = strconv.ParseInt(env, 10, 64)
-		if err != nil {
-			resp.Diagnostics.AddAttributeError(path.Root("project_id"), "Invalid project ID",
-				fmt.Sprintf("Cannot parse UPTRACE_PROJECT_ID %q: %s", env, err))
-			return
-		}
+	projectID, err := parseProjectID(conf.ProjectID)
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("project_id"), "Invalid project ID", err.Error())
+		return
 	}
 
 	client := &Client{
@@ -119,12 +100,40 @@ func (p *UptraceProvider) Configure(ctx context.Context, req tfprovider.Configur
 	resp.ResourceData = client
 }
 
+// Resources returns the list of managed resource types.
 func (p *UptraceProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewOrgResource,
 	}
 }
 
+// DataSources returns the list of data source types.
 func (p *UptraceProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return nil
+}
+
+// envOrConfig returns the config value if set, otherwise falls back to the env var.
+func envOrConfig(envKey string, configVal types.String) string {
+	if !configVal.IsNull() {
+		return configVal.ValueString()
+	}
+	return os.Getenv(envKey)
+}
+
+// parseProjectID extracts the project ID from config or env var.
+func parseProjectID(configVal types.Int64) (int64, error) {
+	if !configVal.IsNull() {
+		return configVal.ValueInt64(), nil
+	}
+
+	env := os.Getenv("UPTRACE_PROJECT_ID")
+	if env == "" {
+		return 0, nil
+	}
+
+	id, err := strconv.ParseInt(env, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("cannot parse UPTRACE_PROJECT_ID %q: %w", env, err)
+	}
+	return id, nil
 }
