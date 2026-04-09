@@ -1,4 +1,4 @@
-package provider
+package org
 
 import (
 	"context"
@@ -12,6 +12,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/stretchr/testify/require"
+
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/clients"
 )
 
 func TestOrgResource_CRUD(t *testing.T) {
@@ -52,7 +54,7 @@ func TestOrgResource_CRUD(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orgResource := &OrgResource{client: &Client{Endpoint: srv.URL, Token: "test-token", HTTP: srv.Client()}}
+	orgResource := NewOrgResourceWithClient(&clients.Client{Endpoint: srv.URL, Token: "test-token", HTTP: srv.Client()})
 	schemaResp := &resource.SchemaResponse{}
 	orgResource.Schema(ctx, resource.SchemaRequest{}, schemaResp)
 	sch := schemaResp.Schema

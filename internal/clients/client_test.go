@@ -1,4 +1,4 @@
-package provider
+package clients
 
 import (
 	"context"
@@ -6,12 +6,49 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/errs"
 )
 
-func TestClient_doJSON(t *testing.T) {
+func TestNew_retriesTransientFailures(t *testing.T) {
+	var attempts int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&attempts, 1)
+		if n < 3 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"org":{"id":1}}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "test-token", 0)
+	// Reach into the retryablehttp settings to make backoff fast for tests.
+	rt, ok := c.HTTP.Transport.(*retryablehttp.RoundTripper)
+	require.True(t, ok, "expected retryablehttp transport")
+	rt.Client.RetryWaitMin = 1 * time.Millisecond
+	rt.Client.RetryWaitMax = 5 * time.Millisecond
+
+	var out struct {
+		Org struct {
+			ID int64 `json:"id"`
+		} `json:"org"`
+	}
+	err := c.DoJSON(context.Background(), http.MethodGet, "/orgs/1", nil, &out)
+
+	require.NoError(t, err)
+	require.Equal(t, int32(3), atomic.LoadInt32(&attempts), "expected 3 attempts (2 failures + 1 success)")
+	require.Equal(t, int64(1), out.Org.ID)
+}
+
+func TestClient_DoJSON(t *testing.T) {
 	type capture struct {
 		method      string
 		path        string
@@ -121,14 +158,14 @@ func TestClient_doJSON(t *testing.T) {
 					ID int64 `json:"id"`
 				} `json:"org"`
 			}
-			err := c.doJSON(context.Background(), tt.method, tt.path, tt.in, &out)
+			err := c.DoJSON(context.Background(), tt.method, tt.path, tt.in, &out)
 
 			if tt.wantErr {
 				require.Error(t, err)
 				if tt.wantErrMsg != "" {
 					require.Contains(t, err.Error(), tt.wantErrMsg)
 				}
-				require.Equal(t, tt.wantNotFound, isNotFound(err))
+				require.Equal(t, tt.wantNotFound, errs.IsNotFound(err))
 				return
 			}
 			require.NoError(t, err)

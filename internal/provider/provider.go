@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"strconv"
 
@@ -13,6 +12,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/clients"
 )
 
 // UptraceProvider implements the Terraform provider for Uptrace.
@@ -20,27 +21,24 @@ type UptraceProvider struct {
 	version string
 }
 
-// uptraceProviderModel maps the provider HCL config to Go types.
 type uptraceProviderModel struct {
 	Endpoint  types.String `tfsdk:"endpoint"`
 	Token     types.String `tfsdk:"token"`
 	ProjectID types.Int64  `tfsdk:"project_id"`
 }
 
-// New returns a factory function that creates the provider.
+// New returns a provider factory for use with providerserver.Serve.
 func New(version string) func() tfprovider.Provider {
 	return func() tfprovider.Provider {
 		return &UptraceProvider{version: version}
 	}
 }
 
-// Metadata sets the provider type name.
 func (p *UptraceProvider) Metadata(_ context.Context, _ tfprovider.MetadataRequest, resp *tfprovider.MetadataResponse) {
 	resp.TypeName = "uptrace"
 	resp.Version = p.version
 }
 
-// Schema defines the provider configuration attributes.
 func (p *UptraceProvider) Schema(_ context.Context, _ tfprovider.SchemaRequest, resp *tfprovider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
@@ -58,7 +56,9 @@ func (p *UptraceProvider) Schema(_ context.Context, _ tfprovider.SchemaRequest, 
 	}
 }
 
-// Configure creates the API client from provider config and env vars.
+// Configure resolves provider settings from HCL config or environment
+// variables (UPTRACE_ENDPOINT, UPTRACE_TOKEN, UPTRACE_PROJECT_ID) and builds
+// the shared API client.
 func (p *UptraceProvider) Configure(ctx context.Context, req tfprovider.ConfigureRequest, resp *tfprovider.ConfigureResponse) {
 	var conf uptraceProviderModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &conf)...)
@@ -89,30 +89,28 @@ func (p *UptraceProvider) Configure(ctx context.Context, req tfprovider.Configur
 		return
 	}
 
-	client := &Client{
-		Endpoint:  endpoint,
-		Token:     token,
-		ProjectID: projectID,
-		HTTP:      http.DefaultClient,
-	}
+	client := clients.New(endpoint, token, projectID)
 
 	resp.DataSourceData = client
 	resp.ResourceData = client
 }
 
-// Resources returns the list of managed resource types.
 func (p *UptraceProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{
-		NewOrgResource,
+	var all []func() resource.Resource
+	for _, svc := range services {
+		all = append(all, svc.Resources()...)
 	}
+	return all
 }
 
-// DataSources returns the list of data source types.
 func (p *UptraceProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return nil
+	var all []func() datasource.DataSource
+	for _, svc := range services {
+		all = append(all, svc.DataSources()...)
+	}
+	return all
 }
 
-// envOrConfig returns the config value if set, otherwise falls back to the env var.
 func envOrConfig(envKey string, configVal types.String) string {
 	if !configVal.IsNull() {
 		return configVal.ValueString()
@@ -120,7 +118,6 @@ func envOrConfig(envKey string, configVal types.String) string {
 	return os.Getenv(envKey)
 }
 
-// parseProjectID extracts the project ID from config or env var.
 func parseProjectID(configVal types.Int64) (int64, error) {
 	if !configVal.IsNull() {
 		return configVal.ValueInt64(), nil

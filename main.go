@@ -8,16 +8,15 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/provider"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/version"
 )
-
-var version = "dev"
 
 func main() {
 	var debug bool
 	flag.BoolVar(&debug, "debug", false, "enable debug mode")
 	flag.Parse()
 
-	err := providerserver.Serve(context.Background(), provider.New(version), providerserver.ServeOpts{
+	err := providerserver.Serve(context.Background(), provider.New(version.ProviderVersion), providerserver.ServeOpts{
 		Address: "registry.terraform.io/catalin4513/uptrace-ce",
 		Debug:   debug,
 	})

@@ -1,4 +1,4 @@
-package provider
+package org
 
 import (
 	"context"
@@ -15,6 +15,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/clients"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/errs"
 )
 
 var (
@@ -25,10 +28,9 @@ var (
 
 // OrgResource manages an Uptrace organization.
 type OrgResource struct {
-	client *Client
+	client *clients.Client
 }
 
-// orgModel maps the Terraform state for an organization.
 type orgModel struct {
 	ID        types.String  `tfsdk:"id"`
 	Name      types.String  `tfsdk:"name"`
@@ -37,7 +39,6 @@ type orgModel struct {
 	UpdatedAt types.String  `tfsdk:"updated_at"`
 }
 
-// apiOrg mirrors the JSON representation returned by the Uptrace API.
 type apiOrg struct {
 	ID        int64   `json:"id"`
 	Name      string  `json:"name"`
@@ -46,17 +47,19 @@ type apiOrg struct {
 	UpdatedAt float64 `json:"updatedAt"`
 }
 
-// NewOrgResource returns a new org resource instance.
 func NewOrgResource() resource.Resource {
 	return &OrgResource{}
 }
 
-// Metadata sets the resource type name.
+// NewOrgResourceWithClient is a test helper that injects a pre-built client.
+func NewOrgResourceWithClient(c *clients.Client) *OrgResource {
+	return &OrgResource{client: c}
+}
+
 func (r *OrgResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_org"
 }
 
-// Schema defines the org resource attributes.
 func (r *OrgResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
@@ -86,23 +89,21 @@ func (r *OrgResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 	}
 }
 
-// Configure injects the API client from provider configuration.
 func (r *OrgResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
 
-	client, ok := req.ProviderData.(*Client)
+	client, ok := req.ProviderData.(*clients.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"unexpected provider data type",
-			fmt.Sprintf("expected *Client, got %T", req.ProviderData))
+			fmt.Sprintf("expected *clients.Client, got %T", req.ProviderData))
 		return
 	}
 	r.client = client
 }
 
-// Create creates a new organization via POST /orgs.
 func (r *OrgResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan orgModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -122,7 +123,7 @@ func (r *OrgResource) Create(ctx context.Context, req resource.CreateRequest, re
 	var out struct {
 		Org apiOrg `json:"org"`
 	}
-	if err := r.client.doJSON(ctx, http.MethodPost, "/orgs", in, &out); err != nil {
+	if err := r.client.DoJSON(ctx, http.MethodPost, "/orgs", in, &out); err != nil {
 		resp.Diagnostics.AddError("create org failed", err.Error())
 		return
 	}
@@ -131,7 +132,6 @@ func (r *OrgResource) Create(ctx context.Context, req resource.CreateRequest, re
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
-// Read refreshes the Terraform state from the API via GET /orgs/{id}.
 func (r *OrgResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state orgModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -142,8 +142,8 @@ func (r *OrgResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 	var out struct {
 		Org apiOrg `json:"org"`
 	}
-	if err := r.client.doJSON(ctx, http.MethodGet, "/orgs/"+state.ID.ValueString(), nil, &out); err != nil {
-		if isNotFound(err) {
+	if err := r.client.DoJSON(ctx, http.MethodGet, "/orgs/"+state.ID.ValueString(), nil, &out); err != nil {
+		if errs.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -155,8 +155,6 @@ func (r *OrgResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Update modifies an existing organization via PUT /orgs/{id}.
-// Only name is updatable; budget changes trigger a replace.
 func (r *OrgResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan orgModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -173,7 +171,7 @@ func (r *OrgResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	var out struct {
 		Org apiOrg `json:"org"`
 	}
-	if err := r.client.doJSON(ctx, http.MethodPut, "/orgs/"+plan.ID.ValueString(), in, &out); err != nil {
+	if err := r.client.DoJSON(ctx, http.MethodPut, "/orgs/"+plan.ID.ValueString(), in, &out); err != nil {
 		resp.Diagnostics.AddError("update org failed", err.Error())
 		return
 	}
@@ -182,7 +180,6 @@ func (r *OrgResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
-// Delete removes an organization via DELETE /orgs/{id}.
 func (r *OrgResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state orgModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -192,25 +189,22 @@ func (r *OrgResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 
 	tflog.Info(ctx, "deleting org", map[string]any{"id": state.ID.ValueString()})
 
-	err := r.client.doJSON(ctx, http.MethodDelete, "/orgs/"+state.ID.ValueString(), nil, nil)
-	if err != nil && !isNotFound(err) {
+	err := r.client.DoJSON(ctx, http.MethodDelete, "/orgs/"+state.ID.ValueString(), nil, nil)
+	if err != nil && !errs.IsNotFound(err) {
 		resp.Diagnostics.AddError("delete org failed", err.Error())
 	}
 }
 
-// ImportState imports an existing org by its numeric ID.
 func (r *OrgResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-// milliToRFC3339 converts Unix milliseconds (as float64) to an RFC3339 string.
 func milliToRFC3339(ms float64) string {
 	sec := int64(ms / 1000)
 	nsec := int64((ms - float64(sec)*1000) * 1e6)
 	return time.Unix(sec, nsec).UTC().Format(time.RFC3339)
 }
 
-// apiOrgToModel converts an API response into Terraform state.
 func apiOrgToModel(org *apiOrg, m *orgModel) {
 	m.ID = types.StringValue(strconv.FormatInt(org.ID, 10))
 	m.Name = types.StringValue(org.Name)
