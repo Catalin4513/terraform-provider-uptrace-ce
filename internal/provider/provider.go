@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/clients"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 )
 
 // UptraceProvider implements the Terraform provider for Uptrace.
@@ -89,10 +89,10 @@ func (p *UptraceProvider) Configure(ctx context.Context, req tfprovider.Configur
 		return
 	}
 
-	client := clients.New(endpoint, token, projectID)
+	c := client.New(endpoint, token, projectID)
 
-	resp.DataSourceData = client
-	resp.ResourceData = client
+	resp.DataSourceData = c
+	resp.ResourceData = c
 }
 
 func (p *UptraceProvider) Resources(_ context.Context) []func() resource.Resource {

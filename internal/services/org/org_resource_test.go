@@ -12,151 +12,203 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
 
-	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/clients"
+	upClient "github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
 
-func TestOrgResource_CRUD(t *testing.T) {
+func newTestClient(t *testing.T, handler http.Handler) *upClient.Client {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	apiClient, err := runtime.NewAPIClient(
+		srv.URL,
+		runtime.WithHTTPClient(&httpDoerAdapter{client: srv.Client()}),
+	)
+	require.NoError(t, err)
+
+	return &upClient.Client{
+		API: generated.NewClient(apiClient),
+	}
+}
+
+type httpDoerAdapter struct {
+	client *http.Client
+}
+
+func (a *httpDoerAdapter) Do(_ context.Context, req *http.Request) (*http.Response, error) {
+	return a.client.Do(req)
+}
+
+func jsonResponse(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func TestOrgResource_Create(t *testing.T) {
 	ctx := context.Background()
 
-	type apiCall struct {
-		method      string
-		path        string
-		auth        string
-		contentType string
-		body        apiOrg
-	}
-	var calls []apiCall
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "/internal/v1/orgs", r.URL.Path)
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		call := apiCall{
-			method:      r.Method,
-			path:        r.URL.Path,
-			auth:        r.Header.Get("Authorization"),
-			contentType: r.Header.Get("Content-Type"),
-		}
-		if call.contentType != "" {
-			_ = json.NewDecoder(r.Body).Decode(&call.body)
-		}
-		calls = append(calls, call)
+		var body generated.OrgCreateRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "Acme", body.Name)
 
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/orgs":
-			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"org":{"id":1,"name":"Acme","budget":250.5,"createdAt":1700000000000,"updatedAt":1700000060000}}`))
-
-		case r.Method == http.MethodDelete && r.URL.Path == "/orgs/1":
-			w.WriteHeader(http.StatusNoContent)
-
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
+		jsonResponse(w, http.StatusOK, generated.OrgResponse{
+			Org: generated.Org{ID: 42, Name: "Acme"},
+		})
 	}))
-	defer srv.Close()
 
-	orgResource := NewOrgResourceWithClient(&clients.Client{Endpoint: srv.URL, Token: "test-token", HTTP: srv.Client()})
+	orgResource := &OrgResource{client: c}
 	schemaResp := &resource.SchemaResponse{}
 	orgResource.Schema(ctx, resource.SchemaRequest{}, schemaResp)
 	sch := schemaResp.Schema
 
 	planRaw := tftypes.NewValue(sch.Type().TerraformType(ctx), map[string]tftypes.Value{
-		"id":         tftypes.NewValue(tftypes.String, nil),
-		"name":       tftypes.NewValue(tftypes.String, "Acme"),
-		"budget":     tftypes.NewValue(tftypes.Number, 250.5),
-		"created_at": tftypes.NewValue(tftypes.String, nil),
-		"updated_at": tftypes.NewValue(tftypes.String, nil),
+		"id":   tftypes.NewValue(tftypes.String, nil),
+		"name": tftypes.NewValue(tftypes.String, "Acme"),
 	})
 	nullRaw := tftypes.NewValue(sch.Type().TerraformType(ctx), nil)
 
 	createReq := resource.CreateRequest{Plan: tfsdk.Plan{Raw: planRaw, Schema: sch}}
 	createResp := resource.CreateResponse{State: tfsdk.State{Raw: nullRaw, Schema: sch}}
 
-	t.Run("create", func(t *testing.T) {
-		orgResource.Create(ctx, createReq, &createResp)
-		require.False(t, createResp.Diagnostics.HasError(), "diagnostics: %v", createResp.Diagnostics)
+	orgResource.Create(ctx, createReq, &createResp)
+	require.False(t, createResp.Diagnostics.HasError(), "diagnostics: %v", createResp.Diagnostics)
 
-		var state orgModel
-		require.False(t, createResp.State.Get(ctx, &state).HasError())
-
-		require.Equal(t, orgModel{
-			ID:        types.StringValue("1"),
-			Name:      types.StringValue("Acme"),
-			Budget:    types.Float64Value(250.5),
-			CreatedAt: types.StringValue("2023-11-14T22:13:20Z"),
-			UpdatedAt: types.StringValue("2023-11-14T22:14:20Z"),
-		}, state)
-
-		require.Equal(t, []apiCall{{
-			method:      http.MethodPost,
-			path:        "/orgs",
-			auth:        "Bearer test-token",
-			contentType: "application/json",
-			body:        apiOrg{Name: "Acme", Budget: 250.5},
-		}}, calls)
-	})
-
-	t.Run("delete", func(t *testing.T) {
-		callsBefore := len(calls)
-
-		deleteReq := resource.DeleteRequest{State: tfsdk.State{Raw: createResp.State.Raw, Schema: sch}}
-		deleteResp := resource.DeleteResponse{State: tfsdk.State{Raw: createResp.State.Raw, Schema: sch}}
-
-		orgResource.Delete(ctx, deleteReq, &deleteResp)
-		require.False(t, deleteResp.Diagnostics.HasError(), "diagnostics: %v", deleteResp.Diagnostics)
-
-		require.Equal(t, []apiCall{{
-			method: http.MethodDelete,
-			path:   "/orgs/1",
-			auth:   "Bearer test-token",
-		}}, calls[callsBefore:])
-	})
+	var state orgModel
+	require.False(t, createResp.State.Get(ctx, &state).HasError())
+	require.Equal(t, types.StringValue("42"), state.ID)
+	require.Equal(t, types.StringValue("Acme"), state.Name)
 }
 
-func TestApiOrgToModel(t *testing.T) {
-	tests := []struct {
-		name string
-		in   apiOrg
-		want orgModel
-	}{
-		{
-			name: "all fields populated",
-			in: apiOrg{
-				ID:        7,
-				Name:      "Acme",
-				Budget:    250.5,
-				CreatedAt: 1700000000000,
-				UpdatedAt: 1700000060000,
-			},
-			want: orgModel{
-				ID:        types.StringValue("7"),
-				Name:      types.StringValue("Acme"),
-				Budget:    types.Float64Value(250.5),
-				CreatedAt: types.StringValue("2023-11-14T22:13:20Z"),
-				UpdatedAt: types.StringValue("2023-11-14T22:14:20Z"),
-			},
-		},
-		{
-			name: "zero budget becomes null",
-			in: apiOrg{
-				ID:     1,
-				Name:   "NoBudget",
-				Budget: 0,
-			},
-			want: orgModel{
-				ID:     types.StringValue("1"),
-				Name:   types.StringValue("NoBudget"),
-				Budget: types.Float64Null(),
-			},
-		},
-	}
+func TestOrgResource_Read(t *testing.T) {
+	ctx := context.Background()
 
-	for _, tt := range tests {
-		var got orgModel
-		apiOrgToModel(&tt.in, &got)
-		require.Equal(t, tt.want.ID, got.ID, tt.name)
-		require.Equal(t, tt.want.Name, got.Name, tt.name)
-		require.Equal(t, tt.want.Budget, got.Budget, tt.name)
-		require.Equal(t, tt.want.CreatedAt, got.CreatedAt, tt.name)
-		require.Equal(t, tt.want.UpdatedAt, got.UpdatedAt, tt.name)
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodGet, r.Method)
+		require.Equal(t, "/internal/v1/orgs/42", r.URL.Path)
+
+		jsonResponse(w, http.StatusOK, generated.OrgResponse{
+			Org: generated.Org{ID: 42, Name: "Acme Updated"},
+		})
+	}))
+
+	orgResource := &OrgResource{client: c}
+	schemaResp := &resource.SchemaResponse{}
+	orgResource.Schema(ctx, resource.SchemaRequest{}, schemaResp)
+	sch := schemaResp.Schema
+
+	stateRaw := tftypes.NewValue(sch.Type().TerraformType(ctx), map[string]tftypes.Value{
+		"id":   tftypes.NewValue(tftypes.String, "42"),
+		"name": tftypes.NewValue(tftypes.String, "Acme"),
+	})
+
+	readReq := resource.ReadRequest{State: tfsdk.State{Raw: stateRaw, Schema: sch}}
+	readResp := resource.ReadResponse{State: tfsdk.State{Raw: stateRaw, Schema: sch}}
+
+	orgResource.Read(ctx, readReq, &readResp)
+	require.False(t, readResp.Diagnostics.HasError(), "diagnostics: %v", readResp.Diagnostics)
+
+	var state orgModel
+	require.False(t, readResp.State.Get(ctx, &state).HasError())
+	require.Equal(t, types.StringValue("42"), state.ID)
+	require.Equal(t, types.StringValue("Acme Updated"), state.Name)
+}
+
+func TestOrgResource_Read_notFound(t *testing.T) {
+	ctx := context.Background()
+
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusNotFound, map[string]string{"message": "not found"})
+	}))
+
+	orgResource := &OrgResource{client: c}
+	schemaResp := &resource.SchemaResponse{}
+	orgResource.Schema(ctx, resource.SchemaRequest{}, schemaResp)
+	sch := schemaResp.Schema
+
+	stateRaw := tftypes.NewValue(sch.Type().TerraformType(ctx), map[string]tftypes.Value{
+		"id":   tftypes.NewValue(tftypes.String, "99"),
+		"name": tftypes.NewValue(tftypes.String, "Gone"),
+	})
+
+	readReq := resource.ReadRequest{State: tfsdk.State{Raw: stateRaw, Schema: sch}}
+	readResp := resource.ReadResponse{State: tfsdk.State{Raw: stateRaw, Schema: sch}}
+
+	orgResource.Read(ctx, readReq, &readResp)
+	require.False(t, readResp.Diagnostics.HasError())
+	require.True(t, readResp.State.Raw.IsNull(), "state should be removed on 404")
+}
+
+func TestOrgResource_Update(t *testing.T) {
+	ctx := context.Background()
+
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPut, r.Method)
+		require.Equal(t, "/internal/v1/orgs/42", r.URL.Path)
+
+		var body generated.OrgUpdateRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "Renamed", body.Name)
+
+		jsonResponse(w, http.StatusOK, generated.OrgResponse{
+			Org: generated.Org{ID: 42, Name: "Renamed"},
+		})
+	}))
+
+	orgResource := &OrgResource{client: c}
+	schemaResp := &resource.SchemaResponse{}
+	orgResource.Schema(ctx, resource.SchemaRequest{}, schemaResp)
+	sch := schemaResp.Schema
+
+	planRaw := tftypes.NewValue(sch.Type().TerraformType(ctx), map[string]tftypes.Value{
+		"id":   tftypes.NewValue(tftypes.String, "42"),
+		"name": tftypes.NewValue(tftypes.String, "Renamed"),
+	})
+
+	updateReq := resource.UpdateRequest{
+		Plan:  tfsdk.Plan{Raw: planRaw, Schema: sch},
+		State: tfsdk.State{Raw: planRaw, Schema: sch},
 	}
+	updateResp := resource.UpdateResponse{State: tfsdk.State{Raw: planRaw, Schema: sch}}
+
+	orgResource.Update(ctx, updateReq, &updateResp)
+	require.False(t, updateResp.Diagnostics.HasError(), "diagnostics: %v", updateResp.Diagnostics)
+
+	var state orgModel
+	require.False(t, updateResp.State.Get(ctx, &state).HasError())
+	require.Equal(t, types.StringValue("Renamed"), state.Name)
+}
+
+func TestOrgResource_Delete(t *testing.T) {
+	ctx := context.Background()
+
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodDelete, r.Method)
+		require.Equal(t, "/internal/v1/orgs/42", r.URL.Path)
+
+		jsonResponse(w, http.StatusOK, struct{}{})
+	}))
+
+	orgResource := &OrgResource{client: c}
+	schemaResp := &resource.SchemaResponse{}
+	orgResource.Schema(ctx, resource.SchemaRequest{}, schemaResp)
+	sch := schemaResp.Schema
+
+	stateRaw := tftypes.NewValue(sch.Type().TerraformType(ctx), map[string]tftypes.Value{
+		"id":   tftypes.NewValue(tftypes.String, "42"),
+		"name": tftypes.NewValue(tftypes.String, "Acme"),
+	})
+
+	deleteReq := resource.DeleteRequest{State: tfsdk.State{Raw: stateRaw, Schema: sch}}
+	deleteResp := resource.DeleteResponse{State: tfsdk.State{Raw: stateRaw, Schema: sch}}
+
+	orgResource.Delete(ctx, deleteReq, &deleteResp)
+	require.False(t, deleteResp.Diagnostics.HasError(), "diagnostics: %v", deleteResp.Diagnostics)
 }
