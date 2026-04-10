@@ -4,10 +4,16 @@ VERSION     ?= dev
 LDFLAGS     := -X $(PKG_NAME)/version.ProviderVersion=$(VERSION)
 
 GO          ?= go
-GOFMT_FILES := $(shell find . -name '*.go' -not -path './vendor/*')
+GOFMT_FILES := $(shell find . -name '*.go' -not -path './vendor/*' -not -path './internal/generated/*')
 
 .PHONY: default
 default: build
+
+.PHONY: generate
+generate:
+	rm -f internal/generated/*.go
+	$(GO) run github.com/uptrace/oapi-codegen-dd/v3/cmd/oapi-codegen \
+		-config oapi-codegen.yaml openapi/openapi.yaml
 
 .PHONY: build
 build:
@@ -17,9 +23,11 @@ build:
 test:
 	$(GO) test ./... -count=1
 
+VET_PKGS := $(shell $(GO) list ./... | grep -v /internal/generated)
+
 .PHONY: vet
 vet:
-	$(GO) vet ./...
+	$(GO) vet $(VET_PKGS)
 
 .PHONY: fmt
 fmt:
