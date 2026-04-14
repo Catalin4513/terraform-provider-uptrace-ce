@@ -63,10 +63,9 @@ func (r *OrgResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 			"budget": schema.Float64Attribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Organization budget. Set on creation only; changes force replacement. Defaults to the system default if not set.",
+				Description: "Organization budget. Set on creation only. Defaults to the system default if not set.",
 				PlanModifiers: []planmodifier.Float64{
 					float64planmodifier.UseStateForUnknown(),
-					float64planmodifier.RequiresReplace(),
 				},
 			},
 		},
