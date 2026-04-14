@@ -58,6 +58,22 @@ Provider config can also be set via environment variables:
 - `UPTRACE_TOKEN`
 - `UPTRACE_PROJECT_ID`
 
+## Running tests
+
+Integration tests hit a real Uptrace API, so they need credentials. Copy
+the committed template to a local `.env` and fill it in:
+
+```bash
+cp .env.example .env
+```
+
+To keep a created org around for manual inspection in the UI after a
+single-subtest run:
+
+```bash
+KEEP_TEST_ORG=1 go test ./internal/services/org/... -v -run 'TestOrgResource_CRUD/create_org$'
+```
+
 ## Commands
 
 ```bash
@@ -73,13 +89,11 @@ terraform state list   # list managed resources
 
 Manages an Uptrace organization.
 
-| Field      | Type   | Required | Note                              |
-|------------|--------|----------|-----------------------------------|
-| name       | string | yes      | Updatable                         |
-| budget     | float  | no       | Set on creation only (replace)    |
-| id         | string | computed |                                   |
-| created_at | string | computed | RFC3339 UTC                       |
-| updated_at | string | computed | RFC3339 UTC                       |
+| Field  | Type   | Required | Note                           |
+|--------|--------|----------|--------------------------------|
+| name   | string | yes      | Updatable                      |
+| budget | float  | no       | Set on creation only (replace) |
+| id     | string | computed |                                |
 
 ## Files not in git
 
@@ -92,3 +106,4 @@ The `.gitignore` excludes files generated locally:
 | `*.tfstate` | Terraform state | Created by `terraform apply` |
 | `.terraform/` | Provider cache | Created by `terraform init` |
 | `.terraform.lock.hcl` | Dependency lock | Created by `terraform init` |
+| `.env` | Local credentials | `cp .env.example .env` |

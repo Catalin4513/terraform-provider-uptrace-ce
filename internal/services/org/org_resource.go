@@ -2,12 +2,15 @@ package org
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -30,8 +33,9 @@ type OrgResource struct {
 }
 
 type orgModel struct {
-	ID   types.String `tfsdk:"id"`
-	Name types.String `tfsdk:"name"`
+	ID     types.String  `tfsdk:"id"`
+	Name   types.String  `tfsdk:"name"`
+	Budget types.Float64 `tfsdk:"budget"`
 }
 
 func NewOrgResource() resource.Resource {
@@ -55,6 +59,14 @@ func (r *OrgResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "Organization name.",
+			},
+			"budget": schema.Float64Attribute{
+				Optional:    true,
+				Computed:    true,
+				Description: "Organization budget. Set on creation only. Defaults to the system default if not set.",
+				PlanModifiers: []planmodifier.Float64{
+					float64planmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -84,10 +96,16 @@ func (r *OrgResource) Create(ctx context.Context, req resource.CreateRequest, re
 
 	tflog.Info(ctx, "creating org", map[string]any{"name": plan.Name.ValueString()})
 
+	createReq := &generated.OrgCreateRequest{
+		Name: plan.Name.ValueString(),
+	}
+	if !plan.Budget.IsNull() && !plan.Budget.IsUnknown() {
+		b := float32(plan.Budget.ValueFloat64())
+		createReq.Budget = &b
+	}
+
 	out, err := r.client.API.CreateOrg(ctx, &generated.CreateOrgRequestOptions{
-		Body: &generated.OrgCreateRequest{
-			Name: plan.Name.ValueString(),
-		},
+		Body: createReq,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("create org failed", err.Error())
@@ -127,6 +145,7 @@ func (r *OrgResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
+// Update syncs the org name only. The upstream app does not support updating budget
 func (r *OrgResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan orgModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -175,7 +194,7 @@ func (r *OrgResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 	_, err = r.client.API.DeleteOrg(ctx, &generated.DeleteOrgRequestOptions{
 		PathParams: &generated.DeleteOrgPath{OrgID: orgID},
 	})
-	if err != nil && !errs.IsNotFound(err) {
+	if err != nil && !errs.IsNotFound(err) && !isEmptyBodyError(err) {
 		resp.Diagnostics.AddError("delete org failed", err.Error())
 	}
 }
@@ -187,8 +206,24 @@ func (r *OrgResource) ImportState(ctx context.Context, req resource.ImportStateR
 func orgToModel(org *generated.Org, m *orgModel) {
 	m.ID = types.StringValue(strconv.FormatUint(org.ID, 10))
 	m.Name = types.StringValue(org.Name)
+	if org.Budget != nil {
+		m.Budget = types.Float64Value(float64(*org.Budget))
+	}
 }
 
 func parseOrgID(s string) (uint64, error) {
 	return strconv.ParseUint(s, 10, 64)
+}
+
+// isEmptyBodyError reports whether err is the generated client failing to
+// json-unmarshal an empty 200 body. DELETE endpoints return 200 with
+// Content-Length: 0, but the generated parser in internal/generated/client.go
+// calls json.Unmarshal unconditionally, producing a *json.SyntaxError at
+// offset 0.
+//
+// TODO: remove once oapi-codegen-dd skips unmarshal on empty bodies (or the
+// DeleteOrg parser is regenerated to handle 204/empty 200).
+func isEmptyBodyError(err error) bool {
+	var syn *json.SyntaxError
+	return errors.As(err, &syn) && syn.Offset == 0
 }

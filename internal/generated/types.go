@@ -190,6 +190,9 @@ func (o OrgResponse) Validate() error {
 
 type OrgCreateRequest struct {
 	Name string `json:"name" validate:"required"`
+
+	// Budget Organization budget. Defaults to the system default if not set.
+	Budget *float32 `json:"budget,omitempty" jsonschema:"Organization budget. Defaults to the system default if not set."`
 }
 
 func (o OrgCreateRequest) Validate() error {
