@@ -8,6 +8,24 @@ import (
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
 )
 
+type DetectorConfig_Params_OneOf struct {
+	runtime.Either[ManualDetectorParams, AutoDetectorParams]
+}
+
+func (d *DetectorConfig_Params_OneOf) Validate() error {
+	if d.IsA() {
+		if v, ok := any(d.A).(runtime.Validator); ok {
+			return v.Validate()
+		}
+	}
+	if d.IsB() {
+		if v, ok := any(d.B).(runtime.Validator); ok {
+			return v.Validate()
+		}
+	}
+	return nil
+}
+
 type RepeatInterval_OneOf struct {
 	union json.RawMessage
 }

@@ -77,7 +77,7 @@ type ClientInterface interface {
 	UpdateMonitor(ctx context.Context, options *UpdateMonitorRequestOptions, reqEditors ...runtime.RequestEditorFn) (*UpdateMonitorResponse, error)
 
 	// DeleteMonitor Delete a monitor
-	DeleteMonitor(ctx context.Context, options *DeleteMonitorRequestOptions, reqEditors ...runtime.RequestEditorFn) (*struct{}, error)
+	DeleteMonitor(ctx context.Context, options *DeleteMonitorRequestOptions, reqEditors ...runtime.RequestEditorFn) (*DeleteMonitorResponse, error)
 
 	// ListDashboards List dashboards
 	ListDashboards(ctx context.Context, options *ListDashboardsRequestOptions, reqEditors ...runtime.RequestEditorFn) (*ListDashboardsResponse, error)
@@ -884,7 +884,7 @@ func (c *Client) UpdateMonitor(ctx context.Context, options *UpdateMonitorReques
 }
 
 // DeleteMonitor Delete a monitor
-func (c *Client) DeleteMonitor(ctx context.Context, options *DeleteMonitorRequestOptions, reqEditors ...runtime.RequestEditorFn) (*struct{}, error) {
+func (c *Client) DeleteMonitor(ctx context.Context, options *DeleteMonitorRequestOptions, reqEditors ...runtime.RequestEditorFn) (*DeleteMonitorResponse, error) {
 	var err error
 	reqParams := runtime.RequestOptionsParameters{
 		RequestURL: c.apiClient.GetBaseURL() + "/internal/v1/monitors/{project_id}/{monitor_id}",
@@ -897,7 +897,7 @@ func (c *Client) DeleteMonitor(ctx context.Context, options *DeleteMonitorReques
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
-	responseParser := func(ctx context.Context, resp *runtime.Response) (*struct{}, error) {
+	responseParser := func(ctx context.Context, resp *runtime.Response) (*DeleteMonitorResponse, error) {
 		bodyBytes := resp.Content
 		if resp.StatusCode != 200 {
 			target := new(DeleteMonitorErrorResponse)
@@ -912,7 +912,7 @@ func (c *Client) DeleteMonitor(ctx context.Context, options *DeleteMonitorReques
 			return nil, runtime.NewClientAPIError(fmt.Errorf("API error (status %d): %v", resp.StatusCode, *target),
 				runtime.WithStatusCode(resp.StatusCode))
 		}
-		target := new(struct{})
+		target := new(DeleteMonitorResponse)
 		if err = json.Unmarshal(bodyBytes, target); err != nil {
 			err = fmt.Errorf("error decoding response: %w", err)
 			return nil, err

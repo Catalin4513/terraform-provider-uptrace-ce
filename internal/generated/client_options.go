@@ -565,6 +565,7 @@ func (o *BindFixtureKeysRequestOptions) GetHeader() (map[string]string, error) {
 // ListMonitorsRequestOptions is the options needed to make a request to ListMonitors.
 type ListMonitorsRequestOptions struct {
 	PathParams *ListMonitorsPath
+	Query      *ListMonitorsQuery
 }
 
 // Validate validates all the fields in the options.
@@ -576,6 +577,14 @@ func (o *ListMonitorsRequestOptions) Validate() error {
 		if v, ok := any(o.PathParams).(runtime.Validator); ok {
 			if err := v.Validate(); err != nil {
 				errors = errors.Append("PathParams", err)
+			}
+		}
+	}
+
+	if o.Query != nil {
+		if v, ok := any(o.Query).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("Query", err)
 			}
 		}
 	}
@@ -593,7 +602,7 @@ func (o *ListMonitorsRequestOptions) GetPathParams() (map[string]any, error) {
 
 // GetQuery returns the query params as a map.
 func (o *ListMonitorsRequestOptions) GetQuery() (map[string]any, error) {
-	return nil, nil
+	return runtime.AsMap[any](o.Query)
 }
 
 // GetBody returns the payload in any type that can be marshalled to JSON by the client.
@@ -803,6 +812,7 @@ func (o *DeleteMonitorRequestOptions) GetHeader() (map[string]string, error) {
 // ListDashboardsRequestOptions is the options needed to make a request to ListDashboards.
 type ListDashboardsRequestOptions struct {
 	PathParams *ListDashboardsPath
+	Query      *ListDashboardsQuery
 }
 
 // Validate validates all the fields in the options.
@@ -814,6 +824,14 @@ func (o *ListDashboardsRequestOptions) Validate() error {
 		if v, ok := any(o.PathParams).(runtime.Validator); ok {
 			if err := v.Validate(); err != nil {
 				errors = errors.Append("PathParams", err)
+			}
+		}
+	}
+
+	if o.Query != nil {
+		if v, ok := any(o.Query).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("Query", err)
 			}
 		}
 	}
@@ -831,7 +849,7 @@ func (o *ListDashboardsRequestOptions) GetPathParams() (map[string]any, error) {
 
 // GetQuery returns the query params as a map.
 func (o *ListDashboardsRequestOptions) GetQuery() (map[string]any, error) {
-	return nil, nil
+	return runtime.AsMap[any](o.Query)
 }
 
 // GetBody returns the payload in any type that can be marshalled to JSON by the client.
@@ -891,6 +909,7 @@ func (o *ListDashboardTagsRequestOptions) GetHeader() (map[string]string, error)
 // ListDashboardTemplatesRequestOptions is the options needed to make a request to ListDashboardTemplates.
 type ListDashboardTemplatesRequestOptions struct {
 	PathParams *ListDashboardTemplatesPath
+	Query      *ListDashboardTemplatesQuery
 }
 
 // Validate validates all the fields in the options.
@@ -902,6 +921,14 @@ func (o *ListDashboardTemplatesRequestOptions) Validate() error {
 		if v, ok := any(o.PathParams).(runtime.Validator); ok {
 			if err := v.Validate(); err != nil {
 				errors = errors.Append("PathParams", err)
+			}
+		}
+	}
+
+	if o.Query != nil {
+		if v, ok := any(o.Query).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("Query", err)
 			}
 		}
 	}
@@ -919,7 +946,7 @@ func (o *ListDashboardTemplatesRequestOptions) GetPathParams() (map[string]any, 
 
 // GetQuery returns the query params as a map.
 func (o *ListDashboardTemplatesRequestOptions) GetQuery() (map[string]any, error) {
-	return nil, nil
+	return runtime.AsMap[any](o.Query)
 }
 
 // GetBody returns the payload in any type that can be marshalled to JSON by the client.

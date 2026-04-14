@@ -355,6 +355,92 @@ func (l ListTracesQuery) Validate() error {
 	return errors
 }
 
+type ListMonitorsQuery struct {
+	// Search Free-text search applied to monitor names and attributes.
+	Search *string `json:"search,omitempty" jsonschema:"Free-text search applied to monitor names and attributes."`
+
+	// Status Filter monitors by status (e.g. active, paused, failing).
+	Status *string `json:"status,omitempty" jsonschema:"Filter monitors by status (e.g. active, paused, failing)."`
+
+	// SortBy Column to sort by.
+	SortBy  *string        `json:"sort_by,omitempty" jsonschema:"Column to sort by."`
+	SortDir *SortDirection `json:"sort_dir,omitempty"`
+
+	// Limit Limit number of results.
+	Limit *Limit `json:"limit,omitempty" jsonschema:"Limit number of results."`
+}
+
+func (l ListMonitorsQuery) Validate() error {
+	var errors runtime.ValidationErrors
+	if l.SortDir != nil {
+		if v, ok := any(l.SortDir).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("SortDir", err)
+			}
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+type ListDashboardsQuery struct {
+	// Q Free-text search applied to dashboard name and indexed columns.
+	Q *string `json:"q,omitempty" jsonschema:"Free-text search applied to dashboard name and indexed columns."`
+
+	// Pinned When true, return only pinned dashboards.
+	Pinned *bool `json:"pinned,omitempty" jsonschema:"When true, return only pinned dashboards."`
+
+	// Tag Filter by dashboard tag. Repeat to match any of multiple tags.
+	Tag []string `json:"tag,omitempty" jsonschema:"Filter by dashboard tag. Repeat to match any of multiple tags."`
+
+	// SortBy Column to sort by (e.g. name, updatedAt). Defaults to updatedAt.
+	SortBy  *string        `json:"sort_by,omitempty" jsonschema:"Column to sort by (e.g. name, updatedAt). Defaults to updatedAt."`
+	SortDir *SortDirection `json:"sort_dir,omitempty"`
+}
+
+func (l ListDashboardsQuery) Validate() error {
+	var errors runtime.ValidationErrors
+	if l.SortDir != nil {
+		if v, ok := any(l.SortDir).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("SortDir", err)
+			}
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+type ListDashboardTemplatesQuery struct {
+	// Q Free-text search applied to template name and description.
+	Q *string `json:"q,omitempty" jsonschema:"Free-text search applied to template name and description."`
+
+	// Tag Filter by template tag. Repeat to match any of multiple tags.
+	Tag []string `json:"tag,omitempty" jsonschema:"Filter by template tag. Repeat to match any of multiple tags."`
+
+	// Status Filter by template status.
+	Status *TemplateStatus `json:"status,omitempty" jsonschema:"Filter by template status."`
+}
+
+func (l ListDashboardTemplatesQuery) Validate() error {
+	var errors runtime.ValidationErrors
+	if l.Status != nil {
+		if v, ok := any(l.Status).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("Status", err)
+			}
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
 type ExploreMetricsQuery struct {
 	// TimeStart Start time (inclusive) as RFC3339 timestamp.
 	TimeStart TimeStart `json:"time_start" jsonschema:"Start time (inclusive) as RFC3339 timestamp." validate:"required"`

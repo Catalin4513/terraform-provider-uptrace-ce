@@ -175,6 +175,24 @@ func (o OrderItemOrder) Validate() error {
 	}
 }
 
+// CloseAlertsParamsType Alert type to close.
+type CloseAlertsParamsType string
+
+const (
+	CloseAlertsParamsTypeError  CloseAlertsParamsType = "error"
+	CloseAlertsParamsTypeMetric CloseAlertsParamsType = "metric"
+)
+
+// Validate checks if the CloseAlertsParamsType value is valid
+func (c CloseAlertsParamsType) Validate() error {
+	switch c {
+	case CloseAlertsParamsTypeError, CloseAlertsParamsTypeMetric:
+		return nil
+	default:
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid CloseAlertsParamsType value, got: %v", c))
+	}
+}
+
 // TemplateStatus Template availability status.
 type TemplateStatus string
 
@@ -256,6 +274,84 @@ func (p ProjectUserFixturePermLevel) Validate() error {
 	}
 }
 
+// BaseMonitorRequestTrendAggFunc Aggregation function used to compute the trend baseline.
+type BaseMonitorRequestTrendAggFunc string
+
+const (
+	Avg    BaseMonitorRequestTrendAggFunc = "avg"
+	Last   BaseMonitorRequestTrendAggFunc = "last"
+	Median BaseMonitorRequestTrendAggFunc = "median"
+	Sum    BaseMonitorRequestTrendAggFunc = "sum"
+)
+
+// Validate checks if the BaseMonitorRequestTrendAggFunc value is valid
+func (b BaseMonitorRequestTrendAggFunc) Validate() error {
+	switch b {
+	case Avg, Last, Median, Sum:
+		return nil
+	default:
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid BaseMonitorRequestTrendAggFunc value, got: %v", b))
+	}
+}
+
+// BaseMonitorRequestTrendSensitivity Sensitivity level of the trend-based anomaly detector.
+type BaseMonitorRequestTrendSensitivity string
+
+const (
+	BaseMonitorRequestTrendSensitivityHigh   BaseMonitorRequestTrendSensitivity = "high"
+	BaseMonitorRequestTrendSensitivityLow    BaseMonitorRequestTrendSensitivity = "low"
+	BaseMonitorRequestTrendSensitivityMedium BaseMonitorRequestTrendSensitivity = "medium"
+)
+
+// Validate checks if the BaseMonitorRequestTrendSensitivity value is valid
+func (b BaseMonitorRequestTrendSensitivity) Validate() error {
+	switch b {
+	case BaseMonitorRequestTrendSensitivityHigh, BaseMonitorRequestTrendSensitivityLow, BaseMonitorRequestTrendSensitivityMedium:
+		return nil
+	default:
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid BaseMonitorRequestTrendSensitivity value, got: %v", b))
+	}
+}
+
+// MetricMonitorRequestTrendAggFunc Aggregation function used to compute the trend baseline.
+type MetricMonitorRequestTrendAggFunc string
+
+const (
+	MetricMonitorRequestTrendAggFuncAvg    MetricMonitorRequestTrendAggFunc = "avg"
+	MetricMonitorRequestTrendAggFuncLast   MetricMonitorRequestTrendAggFunc = "last"
+	MetricMonitorRequestTrendAggFuncMedian MetricMonitorRequestTrendAggFunc = "median"
+	MetricMonitorRequestTrendAggFuncSum    MetricMonitorRequestTrendAggFunc = "sum"
+)
+
+// Validate checks if the MetricMonitorRequestTrendAggFunc value is valid
+func (m MetricMonitorRequestTrendAggFunc) Validate() error {
+	switch m {
+	case MetricMonitorRequestTrendAggFuncAvg, MetricMonitorRequestTrendAggFuncLast, MetricMonitorRequestTrendAggFuncMedian, MetricMonitorRequestTrendAggFuncSum:
+		return nil
+	default:
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid MetricMonitorRequestTrendAggFunc value, got: %v", m))
+	}
+}
+
+// MetricMonitorRequestTrendSensitivity Sensitivity level of the trend-based anomaly detector.
+type MetricMonitorRequestTrendSensitivity string
+
+const (
+	MetricMonitorRequestTrendSensitivityHigh   MetricMonitorRequestTrendSensitivity = "high"
+	MetricMonitorRequestTrendSensitivityLow    MetricMonitorRequestTrendSensitivity = "low"
+	MetricMonitorRequestTrendSensitivityMedium MetricMonitorRequestTrendSensitivity = "medium"
+)
+
+// Validate checks if the MetricMonitorRequestTrendSensitivity value is valid
+func (m MetricMonitorRequestTrendSensitivity) Validate() error {
+	switch m {
+	case MetricMonitorRequestTrendSensitivityHigh, MetricMonitorRequestTrendSensitivityLow, MetricMonitorRequestTrendSensitivityMedium:
+		return nil
+	default:
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid MetricMonitorRequestTrendSensitivity value, got: %v", m))
+	}
+}
+
 type MetricMonitorRequestType string
 
 const (
@@ -269,6 +365,45 @@ func (m MetricMonitorRequestType) Validate() error {
 		return nil
 	default:
 		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid MetricMonitorRequestType value, got: %v", m))
+	}
+}
+
+// ErrorMonitorRequestTrendAggFunc Aggregation function used to compute the trend baseline.
+type ErrorMonitorRequestTrendAggFunc string
+
+const (
+	ErrorMonitorRequestTrendAggFuncAvg    ErrorMonitorRequestTrendAggFunc = "avg"
+	ErrorMonitorRequestTrendAggFuncLast   ErrorMonitorRequestTrendAggFunc = "last"
+	ErrorMonitorRequestTrendAggFuncMedian ErrorMonitorRequestTrendAggFunc = "median"
+	ErrorMonitorRequestTrendAggFuncSum    ErrorMonitorRequestTrendAggFunc = "sum"
+)
+
+// Validate checks if the ErrorMonitorRequestTrendAggFunc value is valid
+func (e ErrorMonitorRequestTrendAggFunc) Validate() error {
+	switch e {
+	case ErrorMonitorRequestTrendAggFuncAvg, ErrorMonitorRequestTrendAggFuncLast, ErrorMonitorRequestTrendAggFuncMedian, ErrorMonitorRequestTrendAggFuncSum:
+		return nil
+	default:
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid ErrorMonitorRequestTrendAggFunc value, got: %v", e))
+	}
+}
+
+// ErrorMonitorRequestTrendSensitivity Sensitivity level of the trend-based anomaly detector.
+type ErrorMonitorRequestTrendSensitivity string
+
+const (
+	ErrorMonitorRequestTrendSensitivityHigh   ErrorMonitorRequestTrendSensitivity = "high"
+	ErrorMonitorRequestTrendSensitivityLow    ErrorMonitorRequestTrendSensitivity = "low"
+	ErrorMonitorRequestTrendSensitivityMedium ErrorMonitorRequestTrendSensitivity = "medium"
+)
+
+// Validate checks if the ErrorMonitorRequestTrendSensitivity value is valid
+func (e ErrorMonitorRequestTrendSensitivity) Validate() error {
+	switch e {
+	case ErrorMonitorRequestTrendSensitivityHigh, ErrorMonitorRequestTrendSensitivityLow, ErrorMonitorRequestTrendSensitivityMedium:
+		return nil
+	default:
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid ErrorMonitorRequestTrendSensitivity value, got: %v", e))
 	}
 }
 
@@ -288,56 +423,56 @@ func (e ErrorMonitorRequestType) Validate() error {
 	}
 }
 
-type MetricMonitorParamsBoundsSource string
+type MetricMonitorParamsAbsentPoints string
 
 const (
-	Auto   MetricMonitorParamsBoundsSource = "auto"
-	Manual MetricMonitorParamsBoundsSource = "manual"
+	Ignore                               MetricMonitorParamsAbsentPoints = "ignore"
+	MetricMonitorParamsAbsentPointsAlert MetricMonitorParamsAbsentPoints = "alert"
+	Zero                                 MetricMonitorParamsAbsentPoints = "zero"
 )
 
-// Validate checks if the MetricMonitorParamsBoundsSource value is valid
-func (m MetricMonitorParamsBoundsSource) Validate() error {
+// Validate checks if the MetricMonitorParamsAbsentPoints value is valid
+func (m MetricMonitorParamsAbsentPoints) Validate() error {
 	switch m {
+	case Ignore, MetricMonitorParamsAbsentPointsAlert, Zero:
+		return nil
+	default:
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid MetricMonitorParamsAbsentPoints value, got: %v", m))
+	}
+}
+
+type DetectorConfigType string
+
+const (
+	Auto   DetectorConfigType = "auto"
+	Manual DetectorConfigType = "manual"
+)
+
+// Validate checks if the DetectorConfigType value is valid
+func (d DetectorConfigType) Validate() error {
+	switch d {
 	case Auto, Manual:
 		return nil
 	default:
-		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid MetricMonitorParamsBoundsSource value, got: %v", m))
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid DetectorConfigType value, got: %v", d))
 	}
 }
 
-type MetricMonitorParamsTolerance string
+type AutoDetectorParamsTolerance string
 
 const (
-	MetricMonitorParamsToleranceHigh   MetricMonitorParamsTolerance = "high"
-	MetricMonitorParamsToleranceLow    MetricMonitorParamsTolerance = "low"
-	MetricMonitorParamsToleranceMedium MetricMonitorParamsTolerance = "medium"
+	AutoDetectorParamsToleranceHigh   AutoDetectorParamsTolerance = "high"
+	AutoDetectorParamsToleranceLow    AutoDetectorParamsTolerance = "low"
+	AutoDetectorParamsToleranceMedium AutoDetectorParamsTolerance = "medium"
 )
 
-// Validate checks if the MetricMonitorParamsTolerance value is valid
-func (m MetricMonitorParamsTolerance) Validate() error {
-	switch m {
-	case MetricMonitorParamsToleranceHigh, MetricMonitorParamsToleranceLow, MetricMonitorParamsToleranceMedium:
+// Validate checks if the AutoDetectorParamsTolerance value is valid
+func (a AutoDetectorParamsTolerance) Validate() error {
+	switch a {
+	case AutoDetectorParamsToleranceHigh, AutoDetectorParamsToleranceLow, AutoDetectorParamsToleranceMedium:
 		return nil
 	default:
-		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid MetricMonitorParamsTolerance value, got: %v", m))
-	}
-}
-
-type MetricMonitorParamsNullsMode string
-
-const (
-	Allow   MetricMonitorParamsNullsMode = "allow"
-	Convert MetricMonitorParamsNullsMode = "convert"
-	Forbid  MetricMonitorParamsNullsMode = "forbid"
-)
-
-// Validate checks if the MetricMonitorParamsNullsMode value is valid
-func (m MetricMonitorParamsNullsMode) Validate() error {
-	switch m {
-	case Allow, Convert, Forbid:
-		return nil
-	default:
-		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid MetricMonitorParamsNullsMode value, got: %v", m))
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid AutoDetectorParamsTolerance value, got: %v", a))
 	}
 }
 
@@ -442,22 +577,61 @@ func (m MonitorStatus) Validate() error {
 	}
 }
 
+// MonitorTrendAggFunc Aggregation function used to compute the trend baseline.
+type MonitorTrendAggFunc string
+
+const (
+	MonitorTrendAggFuncAvg    MonitorTrendAggFunc = "avg"
+	MonitorTrendAggFuncLast   MonitorTrendAggFunc = "last"
+	MonitorTrendAggFuncMedian MonitorTrendAggFunc = "median"
+	MonitorTrendAggFuncSum    MonitorTrendAggFunc = "sum"
+)
+
+// Validate checks if the MonitorTrendAggFunc value is valid
+func (m MonitorTrendAggFunc) Validate() error {
+	switch m {
+	case MonitorTrendAggFuncAvg, MonitorTrendAggFuncLast, MonitorTrendAggFuncMedian, MonitorTrendAggFuncSum:
+		return nil
+	default:
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid MonitorTrendAggFunc value, got: %v", m))
+	}
+}
+
+// MonitorTrendSensitivity Sensitivity level of the trend-based anomaly detector.
+type MonitorTrendSensitivity string
+
+const (
+	MonitorTrendSensitivityHigh   MonitorTrendSensitivity = "high"
+	MonitorTrendSensitivityLow    MonitorTrendSensitivity = "low"
+	MonitorTrendSensitivityMedium MonitorTrendSensitivity = "medium"
+)
+
+// Validate checks if the MonitorTrendSensitivity value is valid
+func (m MonitorTrendSensitivity) Validate() error {
+	switch m {
+	case MonitorTrendSensitivityHigh, MonitorTrendSensitivityLow, MonitorTrendSensitivityMedium:
+		return nil
+	default:
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid MonitorTrendSensitivity value, got: %v", m))
+	}
+}
+
 type TableColumnAggFunc string
 
 const (
-	Avg     TableColumnAggFunc = "avg"
-	AvgZero TableColumnAggFunc = "avg_zero"
-	Last    TableColumnAggFunc = "last"
-	Max     TableColumnAggFunc = "max"
-	Median  TableColumnAggFunc = "median"
-	Min     TableColumnAggFunc = "min"
-	Sum     TableColumnAggFunc = "sum"
+	AvgZero                  TableColumnAggFunc = "avg_zero"
+	Max                      TableColumnAggFunc = "max"
+	Min                      TableColumnAggFunc = "min"
+	TableColumnAggFuncAvg    TableColumnAggFunc = "avg"
+	TableColumnAggFuncLast   TableColumnAggFunc = "last"
+	TableColumnAggFuncMedian TableColumnAggFunc = "median"
+	TableColumnAggFuncSum    TableColumnAggFunc = "sum"
 )
 
 // Validate checks if the TableColumnAggFunc value is valid
 func (t TableColumnAggFunc) Validate() error {
 	switch t {
-	case Avg, AvgZero, Last, Max, Median, Min, Sum:
+	case AvgZero, Max, Min, TableColumnAggFuncAvg, TableColumnAggFuncLast, TableColumnAggFuncMedian, TableColumnAggFuncSum:
 		return nil
 	default:
 		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid TableColumnAggFunc value, got: %v", t))

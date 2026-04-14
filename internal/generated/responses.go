@@ -108,6 +108,9 @@ type ListTracesResponse struct {
 	// Query Parsed query parts with error state.
 	Query []map[string]any `json:"query,omitempty" jsonschema:"Parsed query parts with error state."`
 
+	// Join Parsed sub-query clauses for each non-root joined alias. One entry per non-root sub-query passed in query[]/alias[]/system[].
+	Join [][]map[string]any `json:"join,omitempty" jsonschema:"Parsed sub-query clauses for each non-root joined alias. One entry per non-root sub-query passed in query[]/alias[]/system[]."`
+
 	// Sorting Applied sorting configuration.
 	Sorting []OrderItem `json:"sorting,omitempty" jsonschema:"Applied sorting configuration."`
 
@@ -126,6 +129,15 @@ type BindFixtureKeysErrorResponse = BadRequest
 
 type ListMonitorsResponse struct {
 	Monitors []Monitor `json:"monitors" validate:"required"`
+
+	// Statuses Per-status monitor counts across the project (ignores the status filter).
+	Statuses []MonitorStatusCount `json:"statuses,omitempty" jsonschema:"Per-status monitor counts across the project (ignores the status filter)."`
+
+	// Count Total number of monitors matching the current filter.
+	Count *int64 `json:"count,omitempty" jsonschema:"Total number of monitors matching the current filter."`
+
+	// Search Parsed search matchers applied to the request.
+	Search []map[string]any `json:"search,omitempty" jsonschema:"Parsed search matchers applied to the request."`
 }
 
 type ListMonitorsErrorResponse = BadRequest
@@ -142,10 +154,15 @@ type UpdateMonitorResponse = MonitorResponse
 
 type UpdateMonitorErrorResponse = BadRequest
 
+type DeleteMonitorResponse = MonitorResponse
+
 type DeleteMonitorErrorResponse = BadRequest
 
 type ListDashboardsResponse struct {
 	Dashboards []Dashboard `json:"dashboards" validate:"required"`
+
+	// NoData True when no dashboards exist for the project at all (independent of the current filter).
+	NoData *bool `json:"noData,omitempty" jsonschema:"True when no dashboards exist for the project at all (independent of the current filter)."`
 }
 
 type ListDashboardsErrorResponse = BadRequest
