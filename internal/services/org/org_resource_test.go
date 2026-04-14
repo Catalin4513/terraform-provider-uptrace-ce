@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	rschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -129,6 +130,41 @@ func TestOrgResource_Read_notFound(t *testing.T) {
 
 	require.False(t, readResp.Diagnostics.HasError())
 	require.True(t, readResp.State.Raw.IsNull())
+}
+
+// TestOrgResource_BudgetRequiresReplace verifies that changing budget on an
+// existing org triggers a replace plan.
+func TestOrgResource_BudgetRequiresReplace(t *testing.T) {
+	ctx := context.Background()
+
+	schemaResp := &resource.SchemaResponse{}
+	(&OrgResource{}).Schema(ctx, resource.SchemaRequest{}, schemaResp)
+	sch := schemaResp.Schema
+
+	attr, ok := sch.Attributes["budget"].(rschema.Float64Attribute)
+	require.True(t, ok, "budget must be a Float64Attribute")
+
+	priorRaw := planValue(ctx, sch, runtime.Ptr("42"), "test-org-1", 100.0)
+	plannedRaw := planValue(ctx, sch, runtime.Ptr("42"), "test-org-1", 250.0)
+
+	req := planmodifier.Float64Request{
+		State:      tfsdk.State{Raw: priorRaw, Schema: sch},
+		Plan:       tfsdk.Plan{Raw: plannedRaw, Schema: sch},
+		StateValue: types.Float64Value(100),
+		PlanValue:  types.Float64Value(250),
+	}
+
+	var triggered bool
+	for _, pm := range attr.PlanModifiers {
+		resp := planmodifier.Float64Response{}
+		pm.PlanModifyFloat64(ctx, req, &resp)
+		require.False(t, resp.Diagnostics.HasError())
+		if resp.RequiresReplace {
+			triggered = true
+			break
+		}
+	}
+	require.True(t, triggered, "changing budget must force replacement")
 }
 
 func newClient(t *testing.T) *upClient.Client {
