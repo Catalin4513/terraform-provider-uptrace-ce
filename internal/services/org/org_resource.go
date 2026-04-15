@@ -221,10 +221,11 @@ func orgToModel(org *generated.Org, m *orgModel) {
 	m.Name = types.StringValue(org.Name)
 	if org.Budget != nil {
 		m.Budget = types.Float64Value(*org.Budget)
+	} else {
+		m.Budget = types.Float64Null()
 	}
 }
 
 func parseOrgID(s string) (uint64, error) {
 	return strconv.ParseUint(s, 10, 64)
 }
-
