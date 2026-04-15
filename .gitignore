@@ -9,3 +9,5 @@ terraform-provider-*
 terraform.rc
 .tofurc
 vendor/
+.env
+!.env.example

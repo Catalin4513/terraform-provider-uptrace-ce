@@ -155,7 +155,7 @@ type Org struct {
 	ID              uint64   `json:"id" validate:"required"`
 	Name            string   `json:"name" validate:"required"`
 	Status          *string  `json:"status,omitempty"`
-	Budget          *float32 `json:"budget,omitempty"`
+	Budget          *float64 `json:"budget,omitempty"`
 	MfaRequired     *bool    `json:"mfaRequired,omitempty"`
 	DynamicSampling *bool    `json:"dynamicSampling,omitempty"`
 
@@ -190,6 +190,9 @@ func (o OrgResponse) Validate() error {
 
 type OrgCreateRequest struct {
 	Name string `json:"name" validate:"required"`
+
+	// Budget Organization budget. Defaults to the system default if not set.
+	Budget *float64 `json:"budget,omitempty" jsonschema:"Organization budget. Defaults to the system default if not set."`
 }
 
 func (o OrgCreateRequest) Validate() error {
@@ -202,6 +205,15 @@ type OrgUpdateRequest struct {
 }
 
 func (o OrgUpdateRequest) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(o))
+}
+
+type OrgUpdateBudgetRequest struct {
+	// Budget Organization budget. Values below the minimum are clamped.
+	Budget float64 `json:"budget" jsonschema:"Organization budget. Values below the minimum are clamped." validate:"required"`
+}
+
+func (o OrgUpdateBudgetRequest) Validate() error {
 	return runtime.ConvertValidatorError(typesValidator.Struct(o))
 }
 
@@ -251,9 +263,6 @@ type Project struct {
 
 	// MetricRetention Duration string (e.g., 720h).
 	MetricRetention *string `json:"metricRetention,omitempty" jsonschema:"Duration string (e.g., 720h)."`
-
-	// MetricGranularity Duration string (e.g., 1m).
-	MetricGranularity *string `json:"metricGranularity,omitempty" jsonschema:"Duration string (e.g., 1m)."`
 
 	// CreatedAt Unix timestamp in nanoseconds.
 	CreatedAt *float32 `json:"createdAt,omitempty" jsonschema:"Unix timestamp in nanoseconds."`
@@ -338,9 +347,6 @@ type ProjectCreateRequest struct {
 
 	// MetricRetention Duration string (e.g., 720h).
 	MetricRetention *string `json:"metricRetention,omitempty" jsonschema:"Duration string (e.g., 720h)."`
-
-	// MetricGranularity Duration string (e.g., 1m).
-	MetricGranularity *string `json:"metricGranularity,omitempty" jsonschema:"Duration string (e.g., 1m)."`
 }
 
 func (p ProjectCreateRequest) Validate() error {
@@ -500,6 +506,9 @@ type GroupsResult struct {
 	// Query Parsed query parts with error state.
 	Query []map[string]any `json:"query,omitempty" jsonschema:"Parsed query parts with error state."`
 
+	// Join Parsed sub-query clauses for each joined alias. Populated only by list_trace_groups (one entry per non-root sub-query); empty for span groups.
+	Join [][]map[string]any `json:"join,omitempty" jsonschema:"Parsed sub-query clauses for each joined alias. Populated only by list_trace_groups (one entry per non-root sub-query); empty for span groups."`
+
 	// Sorting Applied sorting configuration.
 	Sorting []OrderItem `json:"sorting,omitempty" jsonschema:"Applied sorting configuration."`
 
@@ -597,10 +606,49 @@ type AnnotationCreateRequest struct {
 
 	// Time Overrides annotation time in RFC3339 format.
 	Time *time.Time `json:"time,omitempty" jsonschema:"Overrides annotation time in RFC3339 format."`
+
+	// CloseAlerts Optional directive to close matching open alerts when the annotation is created. Alerts whose type matches and whose attributes contain all key/value pairs in attrs are closed.
+	CloseAlerts *CloseAlertsParams `json:"closeAlerts,omitempty" jsonschema:"Optional directive to close matching open alerts when the annotation is created. Alerts whose type matches and whose attributes contain all key/value pairs in attrs are closed."`
 }
 
 func (a AnnotationCreateRequest) Validate() error {
-	return runtime.ConvertValidatorError(typesValidator.Struct(a))
+	var errors runtime.ValidationErrors
+	if err := typesValidator.Var(a.Name, "required"); err != nil {
+		errors = errors.Append("Name", err)
+	}
+	if a.CloseAlerts != nil {
+		if v, ok := any(a.CloseAlerts).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("CloseAlerts", err)
+			}
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+// CloseAlertsParams Optional directive to close matching open alerts when the annotation is created. Alerts whose type matches and whose attributes contain all key/value pairs in attrs are closed.
+type CloseAlertsParams struct {
+	// Type Alert type to close.
+	Type CloseAlertsParamsType `json:"type" jsonschema:"Alert type to close." validate:"required"`
+
+	// Attrs Attribute key/value pairs that an alert must match to be closed.
+	Attrs map[string]string `json:"attrs,omitempty" jsonschema:"Attribute key/value pairs that an alert must match to be closed."`
+}
+
+func (c CloseAlertsParams) Validate() error {
+	var errors runtime.ValidationErrors
+	if v, ok := any(c.Type).(runtime.Validator); ok {
+		if err := v.Validate(); err != nil {
+			errors = errors.Append("Type", err)
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
 }
 
 type ListDashboardTemplatesResponse struct {
@@ -608,6 +656,9 @@ type ListDashboardTemplatesResponse struct {
 
 	// Tags All unique tags across templates.
 	Tags []string `json:"tags,omitempty" jsonschema:"All unique tags across templates."`
+
+	// Statuses Per-status counts across the project (ignores the status filter).
+	Statuses []TemplateStatusCount `json:"statuses,omitempty" jsonschema:"Per-status counts across the project (ignores the status filter)."`
 }
 
 func (l ListDashboardTemplatesResponse) Validate() error {
@@ -618,6 +669,36 @@ func (l ListDashboardTemplatesResponse) Validate() error {
 				errors = errors.Append(fmt.Sprintf("Templates[%d]", i), err)
 			}
 		}
+	}
+	for i, item := range l.Statuses {
+		if v, ok := any(item).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append(fmt.Sprintf("Statuses[%d]", i), err)
+			}
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+// TemplateStatusCount Number of dashboard templates in a given status.
+type TemplateStatusCount struct {
+	// Status Template availability status.
+	Status TemplateStatus `json:"status" jsonschema:"Template availability status." validate:"required"`
+	Count  int            `json:"count" validate:"required"`
+}
+
+func (t TemplateStatusCount) Validate() error {
+	var errors runtime.ValidationErrors
+	if v, ok := any(t.Status).(runtime.Validator); ok {
+		if err := v.Validate(); err != nil {
+			errors = errors.Append("Status", err)
+		}
+	}
+	if err := typesValidator.Var(t.Count, "required"); err != nil {
+		errors = errors.Append("Count", err)
 	}
 	if len(errors) == 0 {
 		return nil
@@ -753,6 +834,9 @@ func (d DashboardTemplate) Validate() error {
 type ExploreMetricsResponse struct {
 	Metrics []ExploredMetric `json:"metrics" validate:"required"`
 	HasMore bool             `json:"hasMore"`
+
+	// Search Parsed search matchers applied to the request.
+	Search []map[string]any `json:"search,omitempty" jsonschema:"Parsed search matchers applied to the request."`
 }
 
 func (e ExploreMetricsResponse) Validate() error {
@@ -814,6 +898,12 @@ func (e ExploredMetric) Validate() error {
 
 type ListMetricAttributesResponse struct {
 	Items []MetricAttributeKey `json:"items" validate:"required"`
+
+	// NoData True when no attributes exist for the project at all (independent of the current filter).
+	NoData *bool `json:"noData,omitempty" jsonschema:"True when no attributes exist for the project at all (independent of the current filter)."`
+
+	// WhereAttrs Map of WHERE attribute names to their matched values, derived from the parsed query.
+	WhereAttrs map[string]any `json:"whereAttrs,omitempty" jsonschema:"Map of WHERE attribute names to their matched values, derived from the parsed query."`
 }
 
 func (l ListMetricAttributesResponse) Validate() error {
@@ -835,6 +925,12 @@ type MetricAttributeKey struct {
 	// Value Attribute key with type suffix (e.g. host_name::str).
 	Value string `json:"value" jsonschema:"Attribute key with type suffix (e.g. host_name::str)." validate:"required"`
 
+	// Title Display label for the attribute. When empty, clients fall back to value.
+	Title *string `json:"title,omitempty" jsonschema:"Display label for the attribute. When empty, clients fall back to value."`
+
+	// Subtitle Additional context shown below the title in autocomplete lists.
+	Subtitle *string `json:"subtitle,omitempty" jsonschema:"Additional context shown below the title in autocomplete lists."`
+
 	// Kind Attribute type: str, int, float.
 	Kind string `json:"kind" jsonschema:"Attribute type: str, int, float." validate:"required"`
 
@@ -845,7 +941,7 @@ type MetricAttributeKey struct {
 	Pinned *bool `json:"pinned,omitempty" jsonschema:"Whether the attribute is pinned."`
 
 	// Count Number of metrics using this attribute.
-	Count int `json:"count" jsonschema:"Number of metrics using this attribute." validate:"required"`
+	Count *int `json:"count,omitempty" jsonschema:"Number of metrics using this attribute."`
 }
 
 func (m MetricAttributeKey) Validate() error {
@@ -1186,6 +1282,16 @@ func (m MonitorResponse) Validate() error {
 	return errors
 }
 
+// MonitorStatusCount Number of monitors in a given status.
+type MonitorStatusCount struct {
+	Status string `json:"status" validate:"required"`
+	Count  int    `json:"count" validate:"required"`
+}
+
+func (m MonitorStatusCount) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(m))
+}
+
 type BaseMonitorRequest struct {
 	Name                  string `json:"name" validate:"required"`
 	NotifyEveryoneByEmail *bool  `json:"notifyEveryoneByEmail,omitempty"`
@@ -1194,6 +1300,12 @@ type BaseMonitorRequest struct {
 
 	// RepeatInterval Monitor repeat interval configuration.
 	RepeatInterval *RepeatInterval `json:"repeatInterval,omitempty" jsonschema:"Monitor repeat interval configuration."`
+
+	// TrendAggFunc Aggregation function used to compute the trend baseline.
+	TrendAggFunc *BaseMonitorRequestTrendAggFunc `json:"trendAggFunc,omitempty" jsonschema:"Aggregation function used to compute the trend baseline."`
+
+	// TrendSensitivity Sensitivity level of the trend-based anomaly detector.
+	TrendSensitivity *BaseMonitorRequestTrendSensitivity `json:"trendSensitivity,omitempty" jsonschema:"Sensitivity level of the trend-based anomaly detector."`
 }
 
 func (b BaseMonitorRequest) Validate() error {
@@ -1205,6 +1317,20 @@ func (b BaseMonitorRequest) Validate() error {
 		if v, ok := any(b.RepeatInterval).(runtime.Validator); ok {
 			if err := v.Validate(); err != nil {
 				errors = errors.Append("RepeatInterval", err)
+			}
+		}
+	}
+	if b.TrendAggFunc != nil {
+		if v, ok := any(b.TrendAggFunc).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("TrendAggFunc", err)
+			}
+		}
+	}
+	if b.TrendSensitivity != nil {
+		if v, ok := any(b.TrendSensitivity).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("TrendSensitivity", err)
 			}
 		}
 	}
@@ -1221,9 +1347,15 @@ type MetricMonitorRequest struct {
 	ChannelIds            []int  `json:"channelIds,omitempty"`
 
 	// RepeatInterval Monitor repeat interval configuration.
-	RepeatInterval *RepeatInterval          `json:"repeatInterval,omitempty" jsonschema:"Monitor repeat interval configuration."`
-	Type           MetricMonitorRequestType `json:"type" validate:"required"`
-	Params         MetricMonitorParams      `json:"params"`
+	RepeatInterval *RepeatInterval `json:"repeatInterval,omitempty" jsonschema:"Monitor repeat interval configuration."`
+
+	// TrendAggFunc Aggregation function used to compute the trend baseline.
+	TrendAggFunc *MetricMonitorRequestTrendAggFunc `json:"trendAggFunc,omitempty" jsonschema:"Aggregation function used to compute the trend baseline."`
+
+	// TrendSensitivity Sensitivity level of the trend-based anomaly detector.
+	TrendSensitivity *MetricMonitorRequestTrendSensitivity `json:"trendSensitivity,omitempty" jsonschema:"Sensitivity level of the trend-based anomaly detector."`
+	Type             MetricMonitorRequestType              `json:"type" validate:"required"`
+	Params           MetricMonitorParams                   `json:"params"`
 }
 
 func (m MetricMonitorRequest) Validate() error {
@@ -1235,6 +1367,20 @@ func (m MetricMonitorRequest) Validate() error {
 		if v, ok := any(m.RepeatInterval).(runtime.Validator); ok {
 			if err := v.Validate(); err != nil {
 				errors = errors.Append("RepeatInterval", err)
+			}
+		}
+	}
+	if m.TrendAggFunc != nil {
+		if v, ok := any(m.TrendAggFunc).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("TrendAggFunc", err)
+			}
+		}
+	}
+	if m.TrendSensitivity != nil {
+		if v, ok := any(m.TrendSensitivity).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("TrendSensitivity", err)
 			}
 		}
 	}
@@ -1261,9 +1407,15 @@ type ErrorMonitorRequest struct {
 	ChannelIds            []int  `json:"channelIds,omitempty"`
 
 	// RepeatInterval Monitor repeat interval configuration.
-	RepeatInterval *RepeatInterval         `json:"repeatInterval,omitempty" jsonschema:"Monitor repeat interval configuration."`
-	Type           ErrorMonitorRequestType `json:"type" validate:"required"`
-	Params         ErrorMonitorParams      `json:"params"`
+	RepeatInterval *RepeatInterval `json:"repeatInterval,omitempty" jsonschema:"Monitor repeat interval configuration."`
+
+	// TrendAggFunc Aggregation function used to compute the trend baseline.
+	TrendAggFunc *ErrorMonitorRequestTrendAggFunc `json:"trendAggFunc,omitempty" jsonschema:"Aggregation function used to compute the trend baseline."`
+
+	// TrendSensitivity Sensitivity level of the trend-based anomaly detector.
+	TrendSensitivity *ErrorMonitorRequestTrendSensitivity `json:"trendSensitivity,omitempty" jsonschema:"Sensitivity level of the trend-based anomaly detector."`
+	Type             ErrorMonitorRequestType              `json:"type" validate:"required"`
+	Params           ErrorMonitorParams                   `json:"params"`
 }
 
 func (e ErrorMonitorRequest) Validate() error {
@@ -1275,6 +1427,20 @@ func (e ErrorMonitorRequest) Validate() error {
 		if v, ok := any(e.RepeatInterval).(runtime.Validator); ok {
 			if err := v.Validate(); err != nil {
 				errors = errors.Append("RepeatInterval", err)
+			}
+		}
+	}
+	if e.TrendAggFunc != nil {
+		if v, ok := any(e.TrendAggFunc).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("TrendAggFunc", err)
+			}
+		}
+	}
+	if e.TrendSensitivity != nil {
+		if v, ok := any(e.TrendSensitivity).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("TrendSensitivity", err)
 			}
 		}
 	}
@@ -1295,28 +1461,18 @@ func (e ErrorMonitorRequest) Validate() error {
 }
 
 type MetricMonitorParams struct {
-	Metrics      []MonitorMetric                  `json:"metrics" validate:"required"`
-	Query        string                           `json:"query" validate:"required"`
-	ColumnName   *string                          `json:"columnName,omitempty"`
-	ColumnUnit   *string                          `json:"columnUnit,omitempty"`
-	BoundsSource *MetricMonitorParamsBoundsSource `json:"boundsSource,omitempty"`
+	Metrics []MonitorMetric `json:"metrics" validate:"required"`
+	Query   string          `json:"query" validate:"required"`
+	Column  *Column         `json:"column,omitempty"`
 
 	// Resolution Resolution in milliseconds.
-	Resolution      *float32                      `json:"resolution,omitempty" jsonschema:"Resolution in milliseconds."`
-	NumEvalPoints   *int                          `json:"numEvalPoints,omitempty"`
-	MinAllowedValue *float32                      `json:"minAllowedValue,omitempty"`
-	MaxAllowedValue *float32                      `json:"maxAllowedValue,omitempty"`
-	Flapping        *FlappingParams               `json:"flapping,omitempty"`
-	Tolerance       *MetricMonitorParamsTolerance `json:"tolerance,omitempty"`
-
-	// TrainingPeriod Training period in milliseconds.
-	TrainingPeriod *float32                      `json:"trainingPeriod,omitempty" jsonschema:"Training period in milliseconds."`
-	MinDevFraction *float32                      `json:"minDevFraction,omitempty"`
-	MinDevValue    *float32                      `json:"minDevValue,omitempty"`
-	NullsMode      *MetricMonitorParamsNullsMode `json:"nullsMode,omitempty"`
+	Resolution    *float32                         `json:"resolution,omitempty" jsonschema:"Resolution in milliseconds."`
+	NumEvalPoints *int                             `json:"numEvalPoints,omitempty"`
+	AbsentPoints  *MetricMonitorParamsAbsentPoints `json:"absentPoints,omitempty"`
 
 	// TimeOffset Time offset in milliseconds.
-	TimeOffset *float32 `json:"timeOffset,omitempty" jsonschema:"Time offset in milliseconds."`
+	TimeOffset *float32       `json:"timeOffset,omitempty" jsonschema:"Time offset in milliseconds."`
+	Detector   DetectorConfig `json:"detector"`
 }
 
 func (m MetricMonitorParams) Validate() error {
@@ -1331,31 +1487,143 @@ func (m MetricMonitorParams) Validate() error {
 	if err := typesValidator.Var(m.Query, "required"); err != nil {
 		errors = errors.Append("Query", err)
 	}
-	if m.BoundsSource != nil {
-		if v, ok := any(m.BoundsSource).(runtime.Validator); ok {
+	if m.Column != nil {
+		if v, ok := any(m.Column).(runtime.Validator); ok {
 			if err := v.Validate(); err != nil {
-				errors = errors.Append("BoundsSource", err)
+				errors = errors.Append("Column", err)
 			}
 		}
 	}
-	if m.Flapping != nil {
-		if v, ok := any(m.Flapping).(runtime.Validator); ok {
+	if m.AbsentPoints != nil {
+		if v, ok := any(m.AbsentPoints).(runtime.Validator); ok {
 			if err := v.Validate(); err != nil {
-				errors = errors.Append("Flapping", err)
+				errors = errors.Append("AbsentPoints", err)
 			}
 		}
 	}
-	if m.Tolerance != nil {
-		if v, ok := any(m.Tolerance).(runtime.Validator); ok {
+	if v, ok := any(m.Detector).(runtime.Validator); ok {
+		if err := v.Validate(); err != nil {
+			errors = errors.Append("Detector", err)
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+type DetectorConfig struct {
+	Type   DetectorConfigType    `json:"type" validate:"required"`
+	Params DetectorConfig_Params `json:"params"`
+}
+
+func (d DetectorConfig) Validate() error {
+	var errors runtime.ValidationErrors
+	if v, ok := any(d.Type).(runtime.Validator); ok {
+		if err := v.Validate(); err != nil {
+			errors = errors.Append("Type", err)
+		}
+	}
+	if v, ok := any(d.Params).(runtime.Validator); ok {
+		if err := v.Validate(); err != nil {
+			errors = errors.Append("Params", err)
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+type DetectorConfig_Params struct {
+	DetectorConfig_Params_OneOf *DetectorConfig_Params_OneOf `json:"-"`
+}
+
+func (d DetectorConfig_Params) Validate() error {
+	var errors runtime.ValidationErrors
+	if d.DetectorConfig_Params_OneOf != nil {
+		if v, ok := any(d.DetectorConfig_Params_OneOf).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("DetectorConfig_Params_OneOf", err)
+			}
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+func (d DetectorConfig_Params) MarshalJSON() ([]byte, error) {
+	var parts []json.RawMessage
+
+	{
+		b, err := runtime.MarshalJSON(d.DetectorConfig_Params_OneOf)
+		if err != nil {
+			return nil, fmt.Errorf("DetectorConfig_Params_OneOf marshal: %w", err)
+		}
+		parts = append(parts, b)
+	}
+
+	return runtime.CoalesceOrMerge(parts...)
+}
+
+func (d *DetectorConfig_Params) UnmarshalJSON(data []byte) error {
+	trim := bytes.TrimSpace(data)
+	if bytes.Equal(trim, []byte("null")) {
+		return nil
+	}
+	if len(trim) == 0 {
+		return fmt.Errorf("empty JSON input")
+	}
+
+	if d.DetectorConfig_Params_OneOf == nil {
+		d.DetectorConfig_Params_OneOf = &DetectorConfig_Params_OneOf{}
+	}
+
+	if err := runtime.UnmarshalJSON(data, d.DetectorConfig_Params_OneOf); err != nil {
+		return fmt.Errorf("DetectorConfig_Params_OneOf unmarshal: %w", err)
+	}
+
+	return nil
+}
+
+type ManualDetectorParams struct {
+	MinValue *float32  `json:"minValue,omitempty"`
+	MaxValue *float32  `json:"maxValue,omitempty"`
+	Recovery *Recovery `json:"recovery,omitempty"`
+}
+
+func (m ManualDetectorParams) Validate() error {
+	var errors runtime.ValidationErrors
+	if m.Recovery != nil {
+		if v, ok := any(m.Recovery).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("Recovery", err)
+			}
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+type AutoDetectorParams struct {
+	Tolerance *AutoDetectorParamsTolerance `json:"tolerance,omitempty"`
+
+	// TrainingPeriod Training period in milliseconds.
+	TrainingPeriod *float32 `json:"trainingPeriod,omitempty" jsonschema:"Training period in milliseconds."`
+	MinDevFraction *float32 `json:"minDevFraction,omitempty"`
+	MinDevAbsolute *float32 `json:"minDevAbsolute,omitempty"`
+}
+
+func (a AutoDetectorParams) Validate() error {
+	var errors runtime.ValidationErrors
+	if a.Tolerance != nil {
+		if v, ok := any(a.Tolerance).(runtime.Validator); ok {
 			if err := v.Validate(); err != nil {
 				errors = errors.Append("Tolerance", err)
-			}
-		}
-	}
-	if m.NullsMode != nil {
-		if v, ok := any(m.NullsMode).(runtime.Validator); ok {
-			if err := v.Validate(); err != nil {
-				errors = errors.Append("NullsMode", err)
 			}
 		}
 	}
@@ -1388,9 +1656,17 @@ func (e ErrorMonitorParams) Validate() error {
 	return errors
 }
 
-type FlappingParams struct {
-	MinAllowedValue *float32 `json:"minAllowedValue,omitempty"`
-	MaxAllowedValue *float32 `json:"maxAllowedValue,omitempty"`
+type Column struct {
+	// Name Name of the query result column being monitored.
+	Name *string `json:"name,omitempty" jsonschema:"Name of the query result column being monitored."`
+
+	// Unit Display unit for the column values (e.g. "milliseconds", "bytes").
+	Unit *string `json:"unit,omitempty" jsonschema:"Display unit for the column values (e.g. "milliseconds", "bytes")."`
+}
+
+type Recovery struct {
+	MinValue *float32 `json:"minValue,omitempty"`
+	MaxValue *float32 `json:"maxValue,omitempty"`
 }
 
 type MonitorMetric struct {
@@ -1557,22 +1833,47 @@ func (e ExponentialRepeatInterval) Validate() error {
 }
 
 type Monitor struct {
-	ID     int64         `json:"id" validate:"required"`
-	Name   string        `json:"name" validate:"required"`
-	Type   MonitorType   `json:"type" validate:"required"`
-	Status MonitorStatus `json:"status" validate:"required"`
+	ID        int64  `json:"id" validate:"required"`
+	ProjectID *int64 `json:"projectId,omitempty"`
 
-	// PausedUntil Unix timestamp (nanoseconds) until which the monitor is paused.
-	PausedUntil           *float32 `json:"pausedUntil,omitempty" jsonschema:"Unix timestamp (nanoseconds) until which the monitor is paused."`
-	NotifyEveryoneByEmail *bool    `json:"notifyEveryoneByEmail,omitempty"`
-	TeamIds               []int    `json:"teamIds,omitempty"`
-	ChannelIds            []int    `json:"channelIds,omitempty"`
+	// Key Deduplication key set when the monitor is created from a YAML dashboard template. Empty for monitors created via the UI. When non-empty, (project_id, key) is unique.
+	Key  *string `json:"key,omitempty" jsonschema:"Deduplication key set when the monitor is created from a YAML dashboard template. Empty for monitors created via the UI. When non-empty, (project_id, key) is unique."`
+	Name string  `json:"name" validate:"required"`
+
+	// IsNameTemplated True when the name contains template placeholders that are expanded at evaluation time.
+	IsNameTemplated *bool         `json:"isNameTemplated,omitempty" jsonschema:"True when the name contains template placeholders that are expanded at evaluation time."`
+	Type            MonitorType   `json:"type" validate:"required"`
+	Status          MonitorStatus `json:"status" validate:"required"`
+
+	// PausedUntil Unix timestamp (nanoseconds) until which the monitor is paused. Set when status=paused.
+	PausedUntil *float32 `json:"pausedUntil,omitempty" jsonschema:"Unix timestamp (nanoseconds) until which the monitor is paused. Set when status=paused."`
+
+	// ErrorData Last error message that caused the monitor to be disabled. Set when status=disabled.
+	ErrorData             *string `json:"error,omitempty" jsonschema:"Last error message that caused the monitor to be disabled. Set when status=disabled."`
+	NotifyEveryoneByEmail *bool   `json:"notifyEveryoneByEmail,omitempty"`
+	TeamIds               []int   `json:"teamIds,omitempty"`
+	ChannelIds            []int   `json:"channelIds,omitempty"`
 
 	// RepeatInterval Monitor repeat interval configuration.
 	RepeatInterval *RepeatInterval `json:"repeatInterval,omitempty" jsonschema:"Monitor repeat interval configuration."`
 	Params         map[string]any  `json:"params,omitempty"`
-	CreatedAt      *float32        `json:"createdAt,omitempty"`
-	UpdatedAt      *float32        `json:"updatedAt,omitempty"`
+
+	// TrendAggFunc Aggregation function used to compute the trend baseline.
+	TrendAggFunc *MonitorTrendAggFunc `json:"trendAggFunc,omitempty" jsonschema:"Aggregation function used to compute the trend baseline."`
+
+	// TrendSensitivity Sensitivity level of the trend-based anomaly detector.
+	TrendSensitivity *MonitorTrendSensitivity `json:"trendSensitivity,omitempty" jsonschema:"Sensitivity level of the trend-based anomaly detector."`
+
+	// TrendUpdatedAt Unix timestamp (nanoseconds) when the trend baseline was last refreshed.
+	TrendUpdatedAt *float32 `json:"trendUpdatedAt,omitempty" jsonschema:"Unix timestamp (nanoseconds) when the trend baseline was last refreshed."`
+	CreatedAt      *float32 `json:"createdAt,omitempty"`
+	UpdatedAt      *float32 `json:"updatedAt,omitempty"`
+
+	// CheckedAt Unix timestamp (nanoseconds) when the monitor was last evaluated.
+	CheckedAt *float32 `json:"checkedAt,omitempty" jsonschema:"Unix timestamp (nanoseconds) when the monitor was last evaluated."`
+
+	// NextCheckTime Unix timestamp (nanoseconds) when the monitor is scheduled to be evaluated next.
+	NextCheckTime *float32 `json:"nextCheckTime,omitempty" jsonschema:"Unix timestamp (nanoseconds) when the monitor is scheduled to be evaluated next."`
 }
 
 func (m Monitor) Validate() error {
@@ -1600,6 +1901,20 @@ func (m Monitor) Validate() error {
 			}
 		}
 	}
+	if m.TrendAggFunc != nil {
+		if v, ok := any(m.TrendAggFunc).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("TrendAggFunc", err)
+			}
+		}
+	}
+	if m.TrendSensitivity != nil {
+		if v, ok := any(m.TrendSensitivity).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("TrendSensitivity", err)
+			}
+		}
+	}
 	if len(errors) == 0 {
 		return nil
 	}
@@ -1607,21 +1922,44 @@ func (m Monitor) Validate() error {
 }
 
 type Dashboard struct {
-	ID             int64                  `json:"id" validate:"required"`
-	ProjectID      int64                  `json:"projectId" validate:"required"`
-	TemplateID     *string                `json:"templateId,omitempty"`
-	Name           string                 `json:"name" validate:"required"`
-	Pinned         *bool                  `json:"pinned,omitempty"`
-	MinInterval    *float32               `json:"minInterval,omitempty"`
-	TimeOffset     *float32               `json:"timeOffset,omitempty"`
-	GridQuery      *string                `json:"gridQuery,omitempty"`
-	GridMaxWidth   *int                   `json:"gridMaxWidth,omitempty"`
-	TableMetrics   []MetricAlias          `json:"tableMetrics,omitempty"`
-	TableQuery     *string                `json:"tableQuery,omitempty"`
-	TableGrouping  []string               `json:"tableGrouping,omitempty"`
-	TableColumnMap map[string]TableColumn `json:"tableColumnMap,omitempty"`
-	CreatedAt      *float32               `json:"createdAt,omitempty"`
-	UpdatedAt      *float32               `json:"updatedAt,omitempty"`
+	ID        int64 `json:"id" validate:"required"`
+	ProjectID int64 `json:"projectId" validate:"required"`
+
+	// TemplateID ID of the dashboard template this dashboard was created from, if any.
+	TemplateID *string `json:"templateId,omitempty" jsonschema:"ID of the dashboard template this dashboard was created from, if any."`
+	Name       string  `json:"name" validate:"required"`
+
+	// Version Dashboard schema version, set when the dashboard is created from a template.
+	Version *string `json:"version,omitempty" jsonschema:"Dashboard schema version, set when the dashboard is created from a template."`
+	Pinned  *bool   `json:"pinned,omitempty"`
+
+	// Tags Tags used to categorize and filter dashboards.
+	Tags []string `json:"tags,omitempty" jsonschema:"Tags used to categorize and filter dashboards."`
+
+	// SortingOrder Manual sort order applied when listing dashboards.
+	SortingOrder *int64 `json:"sortingOrder,omitempty" jsonschema:"Manual sort order applied when listing dashboards."`
+
+	// MinInterval Minimum query interval in nanoseconds.
+	MinInterval *float32 `json:"minInterval,omitempty" jsonschema:"Minimum query interval in nanoseconds."`
+
+	// TimeOffset Default time offset applied to queries in nanoseconds.
+	TimeOffset *float32 `json:"timeOffset,omitempty" jsonschema:"Default time offset applied to queries in nanoseconds."`
+
+	// TooltipsConnected When true, hovering a chart highlights the same timestamp on all charts in the dashboard.
+	TooltipsConnected *bool `json:"tooltipsConnected,omitempty" jsonschema:"When true, hovering a chart highlights the same timestamp on all charts in the dashboard."`
+
+	// DefaultTimePeriod Default time period in nanoseconds applied when the dashboard is opened without an explicit range.
+	DefaultTimePeriod *float32 `json:"defaultTimePeriod,omitempty" jsonschema:"Default time period in nanoseconds applied when the dashboard is opened without an explicit range."`
+
+	// Table Configuration for the Table tab of a dashboard.
+	Table        *TableGridItemParams `json:"table,omitempty" jsonschema:"Configuration for the Table tab of a dashboard."`
+	GridMaxWidth *int                 `json:"gridMaxWidth,omitempty"`
+	GridQuery    *string              `json:"gridQuery,omitempty"`
+
+	// GridVariables Attribute names used as filter variables in the Grid tab. When empty, the grouping attributes from the table are used instead.
+	GridVariables []string `json:"gridVariables,omitempty" jsonschema:"Attribute names used as filter variables in the Grid tab. When empty, the grouping attributes from the table are used instead."`
+	CreatedAt     *float32 `json:"createdAt,omitempty"`
+	UpdatedAt     *float32 `json:"updatedAt,omitempty"`
 }
 
 func (d Dashboard) Validate() error {
@@ -1635,17 +1973,47 @@ func (d Dashboard) Validate() error {
 	if err := typesValidator.Var(d.Name, "required"); err != nil {
 		errors = errors.Append("Name", err)
 	}
-	for i, item := range d.TableMetrics {
-		if v, ok := any(item).(runtime.Validator); ok {
+	if d.Table != nil {
+		if v, ok := any(d.Table).(runtime.Validator); ok {
 			if err := v.Validate(); err != nil {
-				errors = errors.Append(fmt.Sprintf("TableMetrics[%d]", i), err)
+				errors = errors.Append("Table", err)
 			}
 		}
 	}
-	for k, v := range d.TableColumnMap {
-		if validator, ok := any(v).(runtime.Validator); ok {
-			if err := validator.Validate(); err != nil {
-				errors = errors.Append(fmt.Sprintf("TableColumnMap[%s]", k), err)
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+// TableGridItemParams Configuration for the Table tab of a dashboard.
+type TableGridItemParams struct {
+	Metrics []MetricAlias `json:"metrics,omitempty"`
+	Query   *string       `json:"query,omitempty"`
+
+	// GroupingAttrs Grouping attributes extracted from the query.
+	GroupingAttrs []string `json:"groupingAttrs,omitempty" jsonschema:"Grouping attributes extracted from the query."`
+
+	// Overrides Per-column visual overrides.
+	Overrides    []map[string]any `json:"overrides,omitempty" jsonschema:"Per-column visual overrides."`
+	Variables    []string         `json:"variables,omitempty"`
+	ItemsPerPage *int             `json:"itemsPerPage,omitempty"`
+	CompactTable *bool            `json:"compactTable,omitempty"`
+	LinesPerRow  *int             `json:"linesPerRow,omitempty"`
+
+	// NullsMode How null values are rendered in the table.
+	NullsMode *string `json:"nullsMode,omitempty" jsonschema:"How null values are rendered in the table."`
+
+	// SortBy Column sort order applied to the table.
+	SortBy []map[string]any `json:"sortBy,omitempty" jsonschema:"Column sort order applied to the table."`
+}
+
+func (t TableGridItemParams) Validate() error {
+	var errors runtime.ValidationErrors
+	for i, item := range t.Metrics {
+		if v, ok := any(item).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append(fmt.Sprintf("Metrics[%d]", i), err)
 			}
 		}
 	}

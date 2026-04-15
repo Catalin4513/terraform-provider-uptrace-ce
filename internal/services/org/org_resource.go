@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -30,8 +31,9 @@ type OrgResource struct {
 }
 
 type orgModel struct {
-	ID   types.String `tfsdk:"id"`
-	Name types.String `tfsdk:"name"`
+	ID     types.String  `tfsdk:"id"`
+	Name   types.String  `tfsdk:"name"`
+	Budget types.Float64 `tfsdk:"budget"`
 }
 
 func NewOrgResource() resource.Resource {
@@ -55,6 +57,14 @@ func (r *OrgResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "Organization name.",
+			},
+			"budget": schema.Float64Attribute{
+				Optional:    true,
+				Computed:    true,
+				Description: "Organization budget. Defaults to the system default if not set.",
+				PlanModifiers: []planmodifier.Float64{
+					float64planmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -84,10 +94,16 @@ func (r *OrgResource) Create(ctx context.Context, req resource.CreateRequest, re
 
 	tflog.Info(ctx, "creating org", map[string]any{"name": plan.Name.ValueString()})
 
+	createReq := &generated.OrgCreateRequest{
+		Name: plan.Name.ValueString(),
+	}
+	if !plan.Budget.IsNull() && !plan.Budget.IsUnknown() {
+		b := plan.Budget.ValueFloat64()
+		createReq.Budget = &b
+	}
+
 	out, err := r.client.API.CreateOrg(ctx, &generated.CreateOrgRequestOptions{
-		Body: &generated.OrgCreateRequest{
-			Name: plan.Name.ValueString(),
-		},
+		Body: createReq,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("create org failed", err.Error())
@@ -128,8 +144,9 @@ func (r *OrgResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 }
 
 func (r *OrgResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan orgModel
+	var plan, state orgModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -152,8 +169,23 @@ func (r *OrgResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		resp.Diagnostics.AddError("update org failed", err.Error())
 		return
 	}
+	org := out.Org
 
-	orgToModel(&out.Org, &plan)
+	if !plan.Budget.IsNull() && !plan.Budget.IsUnknown() && !plan.Budget.Equal(state.Budget) {
+		budgetOut, err := r.client.API.UpdateOrgBudget(ctx, &generated.UpdateOrgBudgetRequestOptions{
+			PathParams: &generated.UpdateOrgBudgetPath{OrgID: orgID},
+			Body: &generated.OrgUpdateBudgetRequest{
+				Budget: plan.Budget.ValueFloat64(),
+			},
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("update org budget failed", err.Error())
+			return
+		}
+		org = budgetOut.Org
+	}
+
+	orgToModel(&org, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -187,6 +219,11 @@ func (r *OrgResource) ImportState(ctx context.Context, req resource.ImportStateR
 func orgToModel(org *generated.Org, m *orgModel) {
 	m.ID = types.StringValue(strconv.FormatUint(org.ID, 10))
 	m.Name = types.StringValue(org.Name)
+	if org.Budget != nil {
+		m.Budget = types.Float64Value(*org.Budget)
+	} else {
+		m.Budget = types.Float64Null()
+	}
 }
 
 func parseOrgID(s string) (uint64, error) {

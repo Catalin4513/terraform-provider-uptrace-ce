@@ -520,6 +520,15 @@ func (d DeleteOrgPath) Validate() error {
 	return runtime.ConvertValidatorError(typesValidator.Struct(d))
 }
 
+type UpdateOrgBudgetPath struct {
+	// OrgID Organization ID.
+	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
+}
+
+func (u UpdateOrgBudgetPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(u))
+}
+
 type ListOrgProjectsPath struct {
 	// OrgID Organization ID.
 	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
