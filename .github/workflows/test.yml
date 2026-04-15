@@ -18,11 +18,22 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Format check
+        run: |
+          unformatted=$(gofmt -s -l .)
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: Build
         run: go build ./...
 
-      - name: Vet
-        run: go vet $(go list ./... | grep -v /internal/generated)
+      - name: Lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
 
       - name: Unit tests
         run: go test ./... -count=1 -v

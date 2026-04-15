@@ -33,6 +33,10 @@ VET_PKGS := $(shell $(GO) list ./... | grep -v /internal/generated)
 vet:
 	$(GO) vet $(VET_PKGS)
 
+.PHONY: lint
+lint:
+	golangci-lint run ./...
+
 .PHONY: fmt
 fmt:
 	gofmt -s -w $(GOFMT_FILES)
