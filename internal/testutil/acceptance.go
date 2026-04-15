@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/provider"
 )
 
@@ -27,4 +28,18 @@ func PreCheck(t *testing.T) {
 	if os.Getenv("UPTRACE_TOKEN") == "" {
 		t.Fatal("UPTRACE_TOKEN must be set for acceptance tests")
 	}
+}
+
+// TestAccClient returns an API client configured from environment variables.
+// It fails the test immediately if the client cannot be created.
+func TestAccClient(t *testing.T) *client.Client {
+	t.Helper()
+	c, err := client.New(
+		os.Getenv("UPTRACE_ENDPOINT"),
+		os.Getenv("UPTRACE_TOKEN"),
+	)
+	if err != nil {
+		t.Fatalf("creating API client: %v", err)
+	}
+	return c
 }

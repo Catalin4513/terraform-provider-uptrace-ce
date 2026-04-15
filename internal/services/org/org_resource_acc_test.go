@@ -3,14 +3,12 @@ package org_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	upClient "github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/errs"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/testutil"
@@ -33,40 +31,36 @@ resource "uptrace_org" "test" {
 `, name, budget)
 }
 
-func testAccCheckOrgDestroy(s *terraform.State) error {
-	c, err := upClient.New(
-		os.Getenv("UPTRACE_ENDPOINT"),
-		os.Getenv("UPTRACE_TOKEN"),
-	)
-	if err != nil {
-		return fmt.Errorf("creating API client: %w", err)
+func testAccCheckOrgDestroy(t *testing.T) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		c := testutil.TestAccClient(t)
+		for _, rs := range s.RootModule().Resources {
+			if rs.Type != "uptrace_org" {
+				continue
+			}
+			orgID, err := strconv.ParseUint(rs.Primary.ID, 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid org ID %q: %w", rs.Primary.ID, err)
+			}
+			_, err = c.API.GetOrg(context.Background(), &generated.GetOrgRequestOptions{
+				PathParams: &generated.GetOrgPath{OrgID: orgID},
+			})
+			if err == nil {
+				return fmt.Errorf("org %s still exists after destroy", rs.Primary.ID)
+			}
+			if !errs.IsNotFound(err) {
+				return fmt.Errorf("checking org %s after destroy: %w", rs.Primary.ID, err)
+			}
+		}
+		return nil
 	}
-	for _, rs := range s.RootModule().Resources {
-		if rs.Type != "uptrace_org" {
-			continue
-		}
-		orgID, err := strconv.ParseUint(rs.Primary.ID, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid org ID %q: %w", rs.Primary.ID, err)
-		}
-		_, err = c.API.GetOrg(context.Background(), &generated.GetOrgRequestOptions{
-			PathParams: &generated.GetOrgPath{OrgID: orgID},
-		})
-		if err == nil {
-			return fmt.Errorf("org %s still exists after destroy", rs.Primary.ID)
-		}
-		if !errs.IsNotFound(err) {
-			return fmt.Errorf("checking org %s after destroy: %w", rs.Primary.ID, err)
-		}
-	}
-	return nil
 }
 
 func TestAccOrg_basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testutil.PreCheck(t) },
 		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
-		CheckDestroy:             testAccCheckOrgDestroy,
+		CheckDestroy:             testAccCheckOrgDestroy(t),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccOrgConfig("acc-test-org"),
@@ -98,7 +92,7 @@ func TestAccOrg_disappearsOutOfBand(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testutil.PreCheck(t) },
 		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
-		CheckDestroy:             testAccCheckOrgDestroy,
+		CheckDestroy:             testAccCheckOrgDestroy(t),
 		Steps: []resource.TestStep{
 			{
 				Config: config,
@@ -146,13 +140,7 @@ func deleteOrgOutOfBand(t *testing.T, orgID string) {
 		t.Fatalf("invalid org ID %q: %v", orgID, err)
 	}
 
-	c, err := upClient.New(
-		os.Getenv("UPTRACE_ENDPOINT"),
-		os.Getenv("UPTRACE_TOKEN"),
-	)
-	if err != nil {
-		t.Fatalf("creating API client: %v", err)
-	}
+	c := testutil.TestAccClient(t)
 	_, err = c.API.DeleteOrg(context.Background(), &generated.DeleteOrgRequestOptions{
 		PathParams: &generated.DeleteOrgPath{OrgID: id},
 	})
@@ -165,7 +153,7 @@ func TestAccOrg_withBudget(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testutil.PreCheck(t) },
 		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
-		CheckDestroy:             testAccCheckOrgDestroy,
+		CheckDestroy:             testAccCheckOrgDestroy(t),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccOrgConfigWithBudget("acc-budget-org", 250),
@@ -194,7 +182,7 @@ func TestAccOrg_removeBudgetKeepsCurrentBudget(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testutil.PreCheck(t) },
 		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
-		CheckDestroy:             testAccCheckOrgDestroy,
+		CheckDestroy:             testAccCheckOrgDestroy(t),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccOrgConfigWithBudget("acc-budget-removed-org", 500),
