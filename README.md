@@ -92,7 +92,7 @@ Manages an Uptrace organization.
 | Field  | Type   | Required | Note                           |
 |--------|--------|----------|--------------------------------|
 | name   | string | yes      | Updatable                      |
-| budget | float  | no       | Set on creation only (replace) |
+| budget | float  | no       | Updatable                      |
 | id     | string | computed |                                |
 
 ## Files not in git
