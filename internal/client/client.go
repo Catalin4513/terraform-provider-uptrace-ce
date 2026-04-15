@@ -53,8 +53,8 @@ func New(endpoint, token string) (*Client, error) {
 
 // IsNotFound reports whether err indicates the resource does not exist.
 func IsNotFound(err error) bool {
-	var clientErr *runtime.ClientAPIError
-	if !errors.As(err, &clientErr) {
+	clientErr, ok := errors.AsType[*runtime.ClientAPIError](err)
+	if !ok {
 		return false
 	}
 	code := clientErr.StatusCode()
