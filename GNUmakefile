@@ -12,6 +12,10 @@ default: build
 
 .PHONY: generate
 generate:
+	@if [ ! -f openapi/openapi.yaml ]; then \
+		echo "Error: openapi/openapi.yaml not found. Run 'git submodule update --init' first." >&2; \
+		exit 1; \
+	fi
 	rm -f internal/generated/*.go
 	$(GO) run github.com/uptrace/oapi-codegen-dd/v3/cmd/oapi-codegen \
 		-config oapi-codegen.yaml openapi/openapi.yaml
