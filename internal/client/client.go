@@ -22,7 +22,7 @@ type Client struct {
 }
 
 // New creates a client with retryable HTTP transport and bearer token auth.
-func New(endpoint, token string, projectID int64) *Client {
+func New(endpoint, token string, projectID int64) (*Client, error) {
 	rc := retryablehttp.NewClient()
 	rc.HTTPClient = &http.Client{Timeout: defaultRequestTimeout}
 	rc.Logger = nil
@@ -32,16 +32,19 @@ func New(endpoint, token string, projectID int64) *Client {
 		return nil
 	}
 
-	apiClient, _ := runtime.NewAPIClient(
+	apiClient, err := runtime.NewAPIClient(
 		endpoint,
 		runtime.WithHTTPClient(&httpDoerAdapter{client: rc.StandardClient()}),
 		runtime.WithRequestEditorFn(bearerAuth),
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Client{
 		API:       generated.NewClient(apiClient),
 		ProjectID: projectID,
-	}
+	}, nil
 }
 
 // httpDoerAdapter adapts a standard *http.Client to the runtime.HttpRequestDoer
@@ -50,6 +53,6 @@ type httpDoerAdapter struct {
 	client *http.Client
 }
 
-func (a *httpDoerAdapter) Do(_ context.Context, req *http.Request) (*http.Response, error) {
-	return a.client.Do(req)
+func (a *httpDoerAdapter) Do(ctx context.Context, req *http.Request) (*http.Response, error) {
+	return a.client.Do(req.WithContext(ctx))
 }

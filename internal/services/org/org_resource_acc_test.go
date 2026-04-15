@@ -34,11 +34,14 @@ resource "uptrace_org" "test" {
 }
 
 func testAccCheckOrgDestroy(s *terraform.State) error {
-	c := upClient.New(
+	c, err := upClient.New(
 		os.Getenv("UPTRACE_ENDPOINT"),
 		os.Getenv("UPTRACE_TOKEN"),
 		0,
 	)
+	if err != nil {
+		return fmt.Errorf("creating API client: %w", err)
+	}
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "uptrace_org" {
 			continue
@@ -144,11 +147,14 @@ func deleteOrgOutOfBand(t *testing.T, orgID string) {
 		t.Fatalf("invalid org ID %q: %v", orgID, err)
 	}
 
-	c := upClient.New(
+	c, err := upClient.New(
 		os.Getenv("UPTRACE_ENDPOINT"),
 		os.Getenv("UPTRACE_TOKEN"),
 		0,
 	)
+	if err != nil {
+		t.Fatalf("creating API client: %v", err)
+	}
 	_, err = c.API.DeleteOrg(context.Background(), &generated.DeleteOrgRequestOptions{
 		PathParams: &generated.DeleteOrgPath{OrgID: id},
 	})

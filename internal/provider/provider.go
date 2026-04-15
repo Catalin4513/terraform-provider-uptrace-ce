@@ -89,7 +89,11 @@ func (p *UptraceProvider) Configure(ctx context.Context, req tfprovider.Configur
 		return
 	}
 
-	c := client.New(endpoint, token, projectID)
+	c, err := client.New(endpoint, token, projectID)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to create API client", err.Error())
+		return
+	}
 
 	resp.DataSourceData = c
 	resp.ResourceData = c
