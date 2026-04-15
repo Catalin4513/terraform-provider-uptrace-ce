@@ -110,7 +110,7 @@ type ClientInterface interface {
 	GetDashboard(ctx context.Context, options *GetDashboardRequestOptions, reqEditors ...runtime.RequestEditorFn) (*GetDashboardResponse, error)
 
 	// DeleteDashboard Delete a dashboard
-	DeleteDashboard(ctx context.Context, options *DeleteDashboardRequestOptions, reqEditors ...runtime.RequestEditorFn) (*struct{}, error)
+	DeleteDashboard(ctx context.Context, options *DeleteDashboardRequestOptions, reqEditors ...runtime.RequestEditorFn) (*DeleteDashboardResponse, error)
 
 	// GetDashboardYaml Get dashboard YAML
 	GetDashboardYaml(ctx context.Context, options *GetDashboardYamlRequestOptions, reqEditors ...runtime.RequestEditorFn) (*GetDashboardYamlResponse, error)
@@ -182,7 +182,10 @@ type ClientInterface interface {
 	UpdateOrg(ctx context.Context, options *UpdateOrgRequestOptions, reqEditors ...runtime.RequestEditorFn) (*UpdateOrgResponse, error)
 
 	// DeleteOrg Delete organization
-	DeleteOrg(ctx context.Context, options *DeleteOrgRequestOptions, reqEditors ...runtime.RequestEditorFn) (*struct{}, error)
+	DeleteOrg(ctx context.Context, options *DeleteOrgRequestOptions, reqEditors ...runtime.RequestEditorFn) (*DeleteOrgResponse, error)
+
+	// UpdateOrgBudget Update organization budget
+	UpdateOrgBudget(ctx context.Context, options *UpdateOrgBudgetRequestOptions, reqEditors ...runtime.RequestEditorFn) (*UpdateOrgBudgetResponse, error)
 
 	// ListOrgProjects List organization projects
 	ListOrgProjects(ctx context.Context, options *ListOrgProjectsRequestOptions, reqEditors ...runtime.RequestEditorFn) (*ListOrgProjectsResponse, error)
@@ -197,7 +200,7 @@ type ClientInterface interface {
 	UpdateProject(ctx context.Context, options *UpdateProjectRequestOptions, reqEditors ...runtime.RequestEditorFn) (*UpdateProjectResponse, error)
 
 	// DeleteProject Delete project
-	DeleteProject(ctx context.Context, options *DeleteProjectRequestOptions, reqEditors ...runtime.RequestEditorFn) (*struct{}, error)
+	DeleteProject(ctx context.Context, options *DeleteProjectRequestOptions, reqEditors ...runtime.RequestEditorFn) (*DeleteProjectResponse, error)
 
 	// GetCurrentUser Get current user
 	GetCurrentUser(ctx context.Context, reqEditors ...runtime.RequestEditorFn) (*GetCurrentUserResponse, error)
@@ -1359,7 +1362,7 @@ func (c *Client) GetDashboard(ctx context.Context, options *GetDashboardRequestO
 }
 
 // DeleteDashboard Delete a dashboard
-func (c *Client) DeleteDashboard(ctx context.Context, options *DeleteDashboardRequestOptions, reqEditors ...runtime.RequestEditorFn) (*struct{}, error) {
+func (c *Client) DeleteDashboard(ctx context.Context, options *DeleteDashboardRequestOptions, reqEditors ...runtime.RequestEditorFn) (*DeleteDashboardResponse, error) {
 	var err error
 	reqParams := runtime.RequestOptionsParameters{
 		RequestURL: c.apiClient.GetBaseURL() + "/internal/v1/dashboards/{project_id}/{dashboard_id}",
@@ -1372,7 +1375,7 @@ func (c *Client) DeleteDashboard(ctx context.Context, options *DeleteDashboardRe
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
-	responseParser := func(ctx context.Context, resp *runtime.Response) (*struct{}, error) {
+	responseParser := func(ctx context.Context, resp *runtime.Response) (*DeleteDashboardResponse, error) {
 		bodyBytes := resp.Content
 		if resp.StatusCode != 200 {
 			target := new(DeleteDashboardErrorResponse)
@@ -1387,7 +1390,7 @@ func (c *Client) DeleteDashboard(ctx context.Context, options *DeleteDashboardRe
 			return nil, runtime.NewClientAPIError(fmt.Errorf("API error (status %d): %v", resp.StatusCode, *target),
 				runtime.WithStatusCode(resp.StatusCode))
 		}
-		target := new(struct{})
+		target := new(DeleteDashboardResponse)
 		if err = json.Unmarshal(bodyBytes, target); err != nil {
 			err = fmt.Errorf("error decoding response: %w", err)
 			return nil, err
@@ -2420,7 +2423,7 @@ func (c *Client) UpdateOrg(ctx context.Context, options *UpdateOrgRequestOptions
 }
 
 // DeleteOrg Delete organization
-func (c *Client) DeleteOrg(ctx context.Context, options *DeleteOrgRequestOptions, reqEditors ...runtime.RequestEditorFn) (*struct{}, error) {
+func (c *Client) DeleteOrg(ctx context.Context, options *DeleteOrgRequestOptions, reqEditors ...runtime.RequestEditorFn) (*DeleteOrgResponse, error) {
 	var err error
 	reqParams := runtime.RequestOptionsParameters{
 		RequestURL: c.apiClient.GetBaseURL() + "/internal/v1/orgs/{org_id}",
@@ -2433,7 +2436,7 @@ func (c *Client) DeleteOrg(ctx context.Context, options *DeleteOrgRequestOptions
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
-	responseParser := func(ctx context.Context, resp *runtime.Response) (*struct{}, error) {
+	responseParser := func(ctx context.Context, resp *runtime.Response) (*DeleteOrgResponse, error) {
 		bodyBytes := resp.Content
 		if resp.StatusCode != 200 {
 			target := new(DeleteOrgErrorResponse)
@@ -2448,7 +2451,7 @@ func (c *Client) DeleteOrg(ctx context.Context, options *DeleteOrgRequestOptions
 			return nil, runtime.NewClientAPIError(fmt.Errorf("API error (status %d): %v", resp.StatusCode, *target),
 				runtime.WithStatusCode(resp.StatusCode))
 		}
-		target := new(struct{})
+		target := new(DeleteOrgResponse)
 		if err = json.Unmarshal(bodyBytes, target); err != nil {
 			err = fmt.Errorf("error decoding response: %w", err)
 			return nil, err
@@ -2457,6 +2460,51 @@ func (c *Client) DeleteOrg(ctx context.Context, options *DeleteOrgRequestOptions
 	}
 
 	resp, err := c.apiClient.ExecuteRequest(ctx, req, "/internal/v1/orgs/{org_id}")
+	if err != nil {
+		return nil, fmt.Errorf("error executing request: %w", err)
+	}
+	return responseParser(ctx, resp)
+}
+
+// UpdateOrgBudget Update organization budget
+func (c *Client) UpdateOrgBudget(ctx context.Context, options *UpdateOrgBudgetRequestOptions, reqEditors ...runtime.RequestEditorFn) (*UpdateOrgBudgetResponse, error) {
+	var err error
+	reqParams := runtime.RequestOptionsParameters{
+		RequestURL:  c.apiClient.GetBaseURL() + "/internal/v1/orgs/{org_id}/budget",
+		Method:      "PUT",
+		Options:     options,
+		ContentType: "application/json",
+	}
+
+	req, err := c.apiClient.CreateRequest(ctx, reqParams, reqEditors...)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	responseParser := func(ctx context.Context, resp *runtime.Response) (*UpdateOrgBudgetResponse, error) {
+		bodyBytes := resp.Content
+		if resp.StatusCode != 200 {
+			target := new(UpdateOrgBudgetErrorResponse)
+			err = json.Unmarshal(bodyBytes, target)
+			if err != nil {
+				return nil, fmt.Errorf("error decoding response: %w", err)
+			}
+
+			if errTarget, ok := any(*target).(error); ok {
+				return nil, runtime.NewClientAPIError(errTarget, runtime.WithStatusCode(resp.StatusCode))
+			}
+			return nil, runtime.NewClientAPIError(fmt.Errorf("API error (status %d): %v", resp.StatusCode, *target),
+				runtime.WithStatusCode(resp.StatusCode))
+		}
+		target := new(UpdateOrgBudgetResponse)
+		if err = json.Unmarshal(bodyBytes, target); err != nil {
+			err = fmt.Errorf("error decoding response: %w", err)
+			return nil, err
+		}
+		return target, nil
+	}
+
+	resp, err := c.apiClient.ExecuteRequest(ctx, req, "/internal/v1/orgs/{org_id}/budget")
 	if err != nil {
 		return nil, fmt.Errorf("error executing request: %w", err)
 	}
@@ -2642,7 +2690,7 @@ func (c *Client) UpdateProject(ctx context.Context, options *UpdateProjectReques
 }
 
 // DeleteProject Delete project
-func (c *Client) DeleteProject(ctx context.Context, options *DeleteProjectRequestOptions, reqEditors ...runtime.RequestEditorFn) (*struct{}, error) {
+func (c *Client) DeleteProject(ctx context.Context, options *DeleteProjectRequestOptions, reqEditors ...runtime.RequestEditorFn) (*DeleteProjectResponse, error) {
 	var err error
 	reqParams := runtime.RequestOptionsParameters{
 		RequestURL: c.apiClient.GetBaseURL() + "/internal/v1/projects/{project_id}",
@@ -2655,7 +2703,7 @@ func (c *Client) DeleteProject(ctx context.Context, options *DeleteProjectReques
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
-	responseParser := func(ctx context.Context, resp *runtime.Response) (*struct{}, error) {
+	responseParser := func(ctx context.Context, resp *runtime.Response) (*DeleteProjectResponse, error) {
 		bodyBytes := resp.Content
 		if resp.StatusCode != 200 {
 			target := new(DeleteProjectErrorResponse)
@@ -2670,7 +2718,7 @@ func (c *Client) DeleteProject(ctx context.Context, options *DeleteProjectReques
 			return nil, runtime.NewClientAPIError(fmt.Errorf("API error (status %d): %v", resp.StatusCode, *target),
 				runtime.WithStatusCode(resp.StatusCode))
 		}
-		target := new(struct{})
+		target := new(DeleteProjectResponse)
 		if err = json.Unmarshal(bodyBytes, target); err != nil {
 			err = fmt.Errorf("error decoding response: %w", err)
 			return nil, err

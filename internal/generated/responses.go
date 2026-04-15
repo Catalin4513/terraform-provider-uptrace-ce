@@ -209,6 +209,8 @@ type GetDashboardResponse struct {
 
 type GetDashboardErrorResponse = BadRequest
 
+type DeleteDashboardResponse = DashboardResponse
+
 type DeleteDashboardErrorResponse = BadRequest
 
 type GetDashboardYamlResponse = []byte
@@ -303,7 +305,13 @@ type UpdateOrgResponse = OrgResponse
 
 type UpdateOrgErrorResponse = BadRequest
 
+type DeleteOrgResponse = OrgResponse
+
 type DeleteOrgErrorResponse = BadRequest
+
+type UpdateOrgBudgetResponse = OrgResponse
+
+type UpdateOrgBudgetErrorResponse = BadRequest
 
 type ListOrgProjectsResponse struct {
 	Projects []Project `json:"projects" validate:"required"`
@@ -322,6 +330,8 @@ type GetProjectErrorResponse = Unauthorized
 type UpdateProjectResponse = ProjectResponse
 
 type UpdateProjectErrorResponse = BadRequest
+
+type DeleteProjectResponse = ProjectResponse
 
 type DeleteProjectErrorResponse = Unauthorized
 

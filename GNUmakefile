@@ -23,6 +23,10 @@ build:
 test:
 	$(GO) test ./... -count=1
 
+.PHONY: testacc
+testacc:
+	$(GO) test ./... -count=1 -tags=integration
+
 VET_PKGS := $(shell $(GO) list ./... | grep -v /internal/generated)
 
 .PHONY: vet

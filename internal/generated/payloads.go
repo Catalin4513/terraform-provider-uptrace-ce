@@ -170,6 +170,8 @@ type CreateOrgBody = OrgCreateRequest
 
 type UpdateOrgBody = OrgUpdateRequest
 
+type UpdateOrgBudgetBody = OrgUpdateBudgetRequest
+
 type CreateProjectBody = ProjectCreateRequest
 
 type UpdateProjectBody = ProjectCreateRequest

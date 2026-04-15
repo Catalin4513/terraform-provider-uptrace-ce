@@ -1,3 +1,5 @@
+//go:build integration
+
 package org
 
 import (
@@ -65,9 +67,10 @@ func TestOrgResource_CRUD(t *testing.T) {
 		require.Equal(t, types.StringValue("test-org-1"), read.Name)
 	})
 
-	t.Run("update name", func(t *testing.T) {
+	t.Run("update name and budget", func(t *testing.T) {
+		const newBudget = 500.0
 		priorStateRaw := planValue(ctx, sch, runtime.Ptr(created.ID.ValueString()), created.Name.ValueString(), budget)
-		planRaw := planValue(ctx, sch, runtime.Ptr(created.ID.ValueString()), "test-org-2", budget)
+		planRaw := planValue(ctx, sch, runtime.Ptr(created.ID.ValueString()), "test-org-2", newBudget)
 
 		resp := resource.UpdateResponse{State: tfsdk.State{Raw: planRaw, Schema: sch}}
 		r.Update(ctx, resource.UpdateRequest{
@@ -79,9 +82,12 @@ func TestOrgResource_CRUD(t *testing.T) {
 		var updated orgModel
 		require.False(t, resp.State.Get(ctx, &updated).HasError())
 		require.Equal(t, types.StringValue("test-org-2"), updated.Name)
+		require.Equal(t, types.Float64Value(newBudget), updated.Budget)
 
 		fresh := fetchOrg(ctx, t, r.client, created.ID.ValueString())
 		require.Equal(t, "test-org-2", fresh.Name)
+		require.NotNil(t, fresh.Budget)
+		require.Equal(t, newBudget, *fresh.Budget)
 		require.Equal(t, createdAt, *fresh.CreatedAt)
 		require.GreaterOrEqual(t, *fresh.UpdatedAt, createdAt)
 	})

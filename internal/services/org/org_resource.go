@@ -2,8 +2,6 @@ package org
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -63,7 +61,7 @@ func (r *OrgResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 			"budget": schema.Float64Attribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Organization budget. Set on creation only. Defaults to the system default if not set.",
+				Description: "Organization budget. Defaults to the system default if not set.",
 				PlanModifiers: []planmodifier.Float64{
 					float64planmodifier.UseStateForUnknown(),
 				},
@@ -100,7 +98,7 @@ func (r *OrgResource) Create(ctx context.Context, req resource.CreateRequest, re
 		Name: plan.Name.ValueString(),
 	}
 	if !plan.Budget.IsNull() && !plan.Budget.IsUnknown() {
-		b := float32(plan.Budget.ValueFloat64())
+		b := plan.Budget.ValueFloat64()
 		createReq.Budget = &b
 	}
 
@@ -145,10 +143,10 @@ func (r *OrgResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Update syncs the org name only. The upstream app does not support updating budget
 func (r *OrgResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan orgModel
+	var plan, state orgModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -171,8 +169,23 @@ func (r *OrgResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		resp.Diagnostics.AddError("update org failed", err.Error())
 		return
 	}
+	org := out.Org
 
-	orgToModel(&out.Org, &plan)
+	if !plan.Budget.IsNull() && !plan.Budget.IsUnknown() && !plan.Budget.Equal(state.Budget) {
+		budgetOut, err := r.client.API.UpdateOrgBudget(ctx, &generated.UpdateOrgBudgetRequestOptions{
+			PathParams: &generated.UpdateOrgBudgetPath{OrgID: orgID},
+			Body: &generated.OrgUpdateBudgetRequest{
+				Budget: plan.Budget.ValueFloat64(),
+			},
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("update org budget failed", err.Error())
+			return
+		}
+		org = budgetOut.Org
+	}
+
+	orgToModel(&org, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -194,7 +207,7 @@ func (r *OrgResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 	_, err = r.client.API.DeleteOrg(ctx, &generated.DeleteOrgRequestOptions{
 		PathParams: &generated.DeleteOrgPath{OrgID: orgID},
 	})
-	if err != nil && !errs.IsNotFound(err) && !isEmptyBodyError(err) {
+	if err != nil && !errs.IsNotFound(err) {
 		resp.Diagnostics.AddError("delete org failed", err.Error())
 	}
 }
@@ -207,7 +220,7 @@ func orgToModel(org *generated.Org, m *orgModel) {
 	m.ID = types.StringValue(strconv.FormatUint(org.ID, 10))
 	m.Name = types.StringValue(org.Name)
 	if org.Budget != nil {
-		m.Budget = types.Float64Value(float64(*org.Budget))
+		m.Budget = types.Float64Value(*org.Budget)
 	}
 }
 
@@ -215,15 +228,3 @@ func parseOrgID(s string) (uint64, error) {
 	return strconv.ParseUint(s, 10, 64)
 }
 
-// isEmptyBodyError reports whether err is the generated client failing to
-// json-unmarshal an empty 200 body. DELETE endpoints return 200 with
-// Content-Length: 0, but the generated parser in internal/generated/client.go
-// calls json.Unmarshal unconditionally, producing a *json.SyntaxError at
-// offset 0.
-//
-// TODO: remove once oapi-codegen-dd skips unmarshal on empty bodies (or the
-// DeleteOrg parser is regenerated to handle 204/empty 200).
-func isEmptyBodyError(err error) bool {
-	var syn *json.SyntaxError
-	return errors.As(err, &syn) && syn.Offset == 0
-}

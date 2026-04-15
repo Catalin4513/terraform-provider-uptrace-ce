@@ -155,7 +155,7 @@ type Org struct {
 	ID              uint64   `json:"id" validate:"required"`
 	Name            string   `json:"name" validate:"required"`
 	Status          *string  `json:"status,omitempty"`
-	Budget          *float32 `json:"budget,omitempty"`
+	Budget          *float64 `json:"budget,omitempty"`
 	MfaRequired     *bool    `json:"mfaRequired,omitempty"`
 	DynamicSampling *bool    `json:"dynamicSampling,omitempty"`
 
@@ -192,7 +192,7 @@ type OrgCreateRequest struct {
 	Name string `json:"name" validate:"required"`
 
 	// Budget Organization budget. Defaults to the system default if not set.
-	Budget *float32 `json:"budget,omitempty" jsonschema:"Organization budget. Defaults to the system default if not set."`
+	Budget *float64 `json:"budget,omitempty" jsonschema:"Organization budget. Defaults to the system default if not set."`
 }
 
 func (o OrgCreateRequest) Validate() error {
@@ -205,6 +205,15 @@ type OrgUpdateRequest struct {
 }
 
 func (o OrgUpdateRequest) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(o))
+}
+
+type OrgUpdateBudgetRequest struct {
+	// Budget Organization budget. Values below the minimum are clamped.
+	Budget float64 `json:"budget" jsonschema:"Organization budget. Values below the minimum are clamped." validate:"required"`
+}
+
+func (o OrgUpdateBudgetRequest) Validate() error {
 	return runtime.ConvertValidatorError(typesValidator.Struct(o))
 }
 
