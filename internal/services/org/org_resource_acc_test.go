@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	upClient "github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/errs"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/testutil"
 )
@@ -52,6 +53,9 @@ func testAccCheckOrgDestroy(s *terraform.State) error {
 		if err == nil {
 			return fmt.Errorf("org %s still exists after destroy", rs.Primary.ID)
 		}
+		if !errs.IsNotFound(err) {
+			return fmt.Errorf("checking org %s after destroy: %w", rs.Primary.ID, err)
+		}
 	}
 	return nil
 }
@@ -87,6 +91,7 @@ func TestAccOrg_basic(t *testing.T) {
 
 func TestAccOrg_disappearsOutOfBand(t *testing.T) {
 	config := testAccOrgConfig("acc-disappear-org")
+	var orgID string
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testutil.PreCheck(t) },
@@ -97,6 +102,7 @@ func TestAccOrg_disappearsOutOfBand(t *testing.T) {
 				Config: config,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("uptrace_org.test", "id"),
+					captureResourceID("uptrace_org.test", &orgID),
 				),
 			},
 			{
@@ -104,7 +110,7 @@ func TestAccOrg_disappearsOutOfBand(t *testing.T) {
 				// Terraform's Read should detect the 404, remove the resource
 				// from state, and the plan should recreate it.
 				PreConfig: func() {
-					deleteOrgOutOfBand(t, "uptrace_org.test")
+					deleteOrgOutOfBand(t, orgID)
 				},
 				Config: config,
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -116,32 +122,39 @@ func TestAccOrg_disappearsOutOfBand(t *testing.T) {
 	})
 }
 
-func deleteOrgOutOfBand(t *testing.T, resourceAddr string) {
+func captureResourceID(resourceAddr string, dest *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceAddr]
+		if !ok {
+			return fmt.Errorf("resource %s not found", resourceAddr)
+		}
+		*dest = rs.Primary.ID
+		return nil
+	}
+}
+
+func deleteOrgOutOfBand(t *testing.T, orgID string) {
 	t.Helper()
-	// We need the org ID from the previous state. PreConfig doesn't receive
-	// state, so we use a package-level var set by a Check func. Instead,
-	// list all orgs and delete the one matching our test name.
+	if orgID == "" {
+		t.Fatal("org ID was not captured before out-of-band delete")
+	}
+
+	id, err := strconv.ParseUint(orgID, 10, 64)
+	if err != nil {
+		t.Fatalf("invalid org ID %q: %v", orgID, err)
+	}
+
 	c := upClient.New(
 		os.Getenv("UPTRACE_ENDPOINT"),
 		os.Getenv("UPTRACE_TOKEN"),
 		0,
 	)
-	orgs, err := c.API.ListOrgs(context.Background())
-	if err != nil {
-		t.Fatalf("list orgs: %v", err)
+	_, err = c.API.DeleteOrg(context.Background(), &generated.DeleteOrgRequestOptions{
+		PathParams: &generated.DeleteOrgPath{OrgID: id},
+	})
+	if err != nil && !errs.IsNotFound(err) {
+		t.Fatalf("delete org %d out-of-band: %v", id, err)
 	}
-	for _, org := range orgs.Orgs {
-		if org.Name == "acc-disappear-org" {
-			_, err := c.API.DeleteOrg(context.Background(), &generated.DeleteOrgRequestOptions{
-				PathParams: &generated.DeleteOrgPath{OrgID: org.ID},
-			})
-			if err != nil {
-				t.Fatalf("delete org %d out-of-band: %v", org.ID, err)
-			}
-			return
-		}
-	}
-	t.Fatal("could not find acc-disappear-org to delete out-of-band")
 }
 
 func TestAccOrg_withBudget(t *testing.T) {
