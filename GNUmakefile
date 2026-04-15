@@ -25,7 +25,7 @@ test:
 
 .PHONY: testacc
 testacc:
-	TF_ACC=1 $(GO) test ./... -count=1 -timeout 10m
+	TF_ACC=1 $(GO) test ./... -v -count=1 -timeout 10m
 
 VET_PKGS := $(shell $(GO) list ./... | grep -v /internal/generated)
 
