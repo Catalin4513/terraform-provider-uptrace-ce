@@ -41,7 +41,7 @@ terraform {
 }
 
 provider "uptrace" {
-  endpoint   = "http://localhost:14318/internal/v1"
+  endpoint   = "http://localhost:14318"
   token      = "user1_secret"
   project_id = 1
 }
