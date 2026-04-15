@@ -1,0 +1,200 @@
+package project_test
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"testing"
+
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
+
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/testutil"
+)
+
+func testAccProjectConfig(orgName, projectName string) string {
+	return fmt.Sprintf(`
+resource "uptrace_org" "test" {
+  name = %q
+}
+
+resource "uptrace_project" "test" {
+  org_id = uptrace_org.test.id
+  name   = %q
+}
+`, orgName, projectName)
+}
+
+func testAccProjectConfigWithRetention(orgName, projectName string, spanRetentionMs, spanTimeRangeMs float64) string {
+	return fmt.Sprintf(`
+resource "uptrace_org" "test" {
+  name = %q
+}
+
+resource "uptrace_project" "test" {
+  org_id          = uptrace_org.test.id
+  name            = %q
+  span_retention  = %v
+  span_time_range = %v
+}
+`, orgName, projectName, spanRetentionMs, spanTimeRangeMs)
+}
+
+func testAccCheckProjectDestroy(t *testing.T) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		c := testutil.TestAccClient(t)
+		for _, rs := range s.RootModule().Resources {
+			if rs.Type != "uptrace_project" {
+				continue
+			}
+			projectID, err := strconv.ParseInt(rs.Primary.ID, 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid project ID %q: %w", rs.Primary.ID, err)
+			}
+			_, err = c.API.GetProject(context.Background(), &generated.GetProjectRequestOptions{
+				PathParams: &generated.GetProjectPath{ProjectID: projectID},
+			})
+			if err == nil {
+				return fmt.Errorf("project %s still exists after destroy", rs.Primary.ID)
+			}
+			if !client.IsNotFound(err) {
+				return fmt.Errorf("checking project %s after destroy: %w", rs.Primary.ID, err)
+			}
+		}
+		return nil
+	}
+}
+
+func TestAccProject_basic(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
+		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckProjectDestroy(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProjectConfig("acc-test-project-org", "acc-test-project"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("uptrace_project.test", "id"),
+					resource.TestCheckResourceAttrSet("uptrace_project.test", "org_id"),
+					resource.TestCheckResourceAttr("uptrace_project.test", "name", "acc-test-project"),
+				),
+			},
+			{
+				Config: testAccProjectConfig("acc-test-project-org", "acc-test-project-renamed"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_project.test", "name", "acc-test-project-renamed"),
+				),
+			},
+			{
+				ResourceName:      "uptrace_project.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs, ok := s.RootModule().Resources["uptrace_project.test"]
+					if !ok {
+						return "", fmt.Errorf("uptrace_project.test not found in state")
+					}
+					return fmt.Sprintf("%s:%s", rs.Primary.Attributes["org_id"], rs.Primary.ID), nil
+				},
+			},
+		},
+	})
+}
+
+func TestAccProject_retentionRoundTrip(t *testing.T) {
+	const (
+		spanRetentionMs = float64(672 * 60 * 60 * 1000)  // 672h — server minimum
+		spanTimeRangeMs = float64(6 * 60 * 60 * 1000)    // 6h
+		bumpedMs        = float64(1000 * 60 * 60 * 1000) // 1000h
+	)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
+		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckProjectDestroy(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProjectConfigWithRetention("acc-retention-org", "acc-retention-project", spanRetentionMs, spanTimeRangeMs),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_project.test", "span_retention", strconv.FormatFloat(spanRetentionMs, 'f', -1, 64)),
+					resource.TestCheckResourceAttr("uptrace_project.test", "span_time_range", strconv.FormatFloat(spanTimeRangeMs, 'f', -1, 64)),
+				),
+			},
+			{
+				// No change — should be a clean no-op plan despite CE's
+				// Read-side retention override.
+				Config:   testAccProjectConfigWithRetention("acc-retention-org", "acc-retention-project", spanRetentionMs, spanTimeRangeMs),
+				PlanOnly: true,
+			},
+			{
+				// User bumps retention — should apply cleanly.
+				Config: testAccProjectConfigWithRetention("acc-retention-org", "acc-retention-project", bumpedMs, spanTimeRangeMs),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_project.test", "span_retention", strconv.FormatFloat(bumpedMs, 'f', -1, 64)),
+				),
+			},
+		},
+	})
+}
+
+func TestAccProject_disappearsOutOfBand(t *testing.T) {
+	config := testAccProjectConfig("acc-disappear-project-org", "acc-disappear-project")
+	var projectID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
+		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckProjectDestroy(t),
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("uptrace_project.test", "id"),
+					captureProjectID("uptrace_project.test", &projectID),
+				),
+			},
+			{
+				PreConfig: func() {
+					deleteProjectOutOfBand(t, projectID)
+				},
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("uptrace_project.test", "id"),
+					resource.TestCheckResourceAttr("uptrace_project.test", "name", "acc-disappear-project"),
+				),
+			},
+		},
+	})
+}
+
+func captureProjectID(resourceAddr string, dest *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceAddr]
+		if !ok {
+			return fmt.Errorf("resource %s not found", resourceAddr)
+		}
+		*dest = rs.Primary.ID
+		return nil
+	}
+}
+
+func deleteProjectOutOfBand(t *testing.T, projectID string) {
+	t.Helper()
+	if projectID == "" {
+		t.Fatal("project ID was not captured before out-of-band delete")
+	}
+
+	id, err := strconv.ParseInt(projectID, 10, 64)
+	if err != nil {
+		t.Fatalf("invalid project ID %q: %v", projectID, err)
+	}
+
+	c := testutil.TestAccClient(t)
+	_, err = c.API.DeleteProject(context.Background(), &generated.DeleteProjectRequestOptions{
+		PathParams: &generated.DeleteProjectPath{ProjectID: id},
+	})
+	if err != nil && !client.IsNotFound(err) {
+		t.Fatalf("delete project %d out-of-band: %v", id, err)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/services/org"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/services/project"
 )
 
 // ServiceRegistration is implemented by every service package under
@@ -17,4 +18,5 @@ type ServiceRegistration interface {
 
 var services = []ServiceRegistration{
 	org.Registration{},
+	project.Registration{},
 }

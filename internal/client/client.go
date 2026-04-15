@@ -51,13 +51,14 @@ func New(endpoint, token string) (*Client, error) {
 	}, nil
 }
 
-// IsNotFound reports whether err is an API 404 error.
+// IsNotFound reports whether err indicates the resource does not exist.
 func IsNotFound(err error) bool {
 	var clientErr *runtime.ClientAPIError
-	if errors.As(err, &clientErr) {
-		return clientErr.StatusCode() == http.StatusNotFound
+	if !errors.As(err, &clientErr) {
+		return false
 	}
-	return false
+	code := clientErr.StatusCode()
+	return code == http.StatusNotFound || code == http.StatusForbidden
 }
 
 // httpDoerAdapter adapts a standard *http.Client to the runtime.HttpRequestDoer
