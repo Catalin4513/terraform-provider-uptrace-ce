@@ -5,17 +5,18 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
-	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/errs"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
 
@@ -57,6 +58,9 @@ func (r *OrgResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "Organization name.",
+				Validators: []validator.String{
+					stringvalidator.UTF8LengthBetween(1, 255),
+				},
 			},
 			"budget": schema.Float64Attribute{
 				Optional:    true,
@@ -131,7 +135,7 @@ func (r *OrgResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 		PathParams: &generated.GetOrgPath{OrgID: orgID},
 	})
 	if err != nil {
-		if errs.IsNotFound(err) {
+		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -207,7 +211,7 @@ func (r *OrgResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 	_, err = r.client.API.DeleteOrg(ctx, &generated.DeleteOrgRequestOptions{
 		PathParams: &generated.DeleteOrgPath{OrgID: orgID},
 	})
-	if err != nil && !errs.IsNotFound(err) {
+	if err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("delete org failed", err.Error())
 	}
 }

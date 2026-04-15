@@ -4,6 +4,7 @@ VERSION     ?= dev
 LDFLAGS     := -X $(PKG_NAME)/version.ProviderVersion=$(VERSION)
 
 GO          ?= go
+OS_ARCH     := $(shell $(GO) env GOOS)_$(shell $(GO) env GOARCH)
 GOFMT_FILES := $(shell find . -name '*.go' -not -path './vendor/*' -not -path './internal/generated/*')
 
 .PHONY: default
@@ -18,6 +19,11 @@ generate:
 .PHONY: build
 build:
 	$(GO) build -ldflags "$(LDFLAGS)" -o $(BINARY) .
+
+.PHONY: install
+install: build
+	mkdir -p ~/.terraform.d/plugins/registry.terraform.io/catalin4513/uptrace-ce/$(VERSION)/$(OS_ARCH)
+	cp $(BINARY) ~/.terraform.d/plugins/registry.terraform.io/catalin4513/uptrace-ce/$(VERSION)/$(OS_ARCH)/
 
 .PHONY: test
 test:

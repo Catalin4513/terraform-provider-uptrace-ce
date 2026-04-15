@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -48,6 +49,15 @@ func New(endpoint, token string) (*Client, error) {
 	return &Client{
 		API: generated.NewClient(apiClient),
 	}, nil
+}
+
+// IsNotFound reports whether err is an API 404 error.
+func IsNotFound(err error) bool {
+	var clientErr *runtime.ClientAPIError
+	if errors.As(err, &clientErr) {
+		return clientErr.StatusCode() == http.StatusNotFound
+	}
+	return false
 }
 
 // httpDoerAdapter adapts a standard *http.Client to the runtime.HttpRequestDoer

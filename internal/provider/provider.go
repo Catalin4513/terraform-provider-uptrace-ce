@@ -109,4 +109,3 @@ func envOrConfig(envKey string, configVal types.String) string {
 	}
 	return os.Getenv(envKey)
 }
-

@@ -19,13 +19,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Format check
-        run: |
-          unformatted=$(gofmt -s -l .)
-          if [ -n "$unformatted" ]; then
-            echo "The following files are not gofmt'd:"
-            echo "$unformatted"
-            exit 1
-          fi
+        run: make fmtcheck
 
       - name: Build
         run: go build ./...
