@@ -172,3 +172,25 @@ func TestAccOrg_withBudget(t *testing.T) {
 		},
 	})
 }
+
+func TestAccOrg_removeBudgetKeepsCurrentBudget(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
+		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckOrgDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccOrgConfigWithBudget("acc-budget-removed-org", 500),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_org.test", "budget", "500"),
+				),
+			},
+			{
+				Config: testAccOrgConfig("acc-budget-removed-org"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_org.test", "budget", "500"),
+				),
+			},
+		},
+	})
+}

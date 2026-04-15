@@ -61,7 +61,7 @@ func (r *OrgResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 			"budget": schema.Float64Attribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Organization budget. Defaults to the system default if not set.",
+				Description: "Organization budget. Defaults to the system default when omitted during creation. Removing this attribute after setting it keeps the current API budget.",
 				PlanModifiers: []planmodifier.Float64{
 					float64planmodifier.UseStateForUnknown(),
 				},

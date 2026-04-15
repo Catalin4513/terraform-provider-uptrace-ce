@@ -120,7 +120,7 @@ Manages an Uptrace organization.
 | Field  | Type   | Required | Note                           |
 |--------|--------|----------|--------------------------------|
 | name   | string | yes      | Updatable                      |
-| budget | float  | no       | Updatable                      |
+| budget | float  | no       | Updatable. Uses the API default when omitted on create. Removing it later keeps the current API budget because Uptrace does not expose an unset/reset operation. |
 | id     | string | computed |                                |
 
 ## Files not in git
