@@ -41,9 +41,8 @@ terraform {
 }
 
 provider "uptrace" {
-  endpoint   = "http://localhost:14318"
-  token      = "user1_secret"
-  project_id = 1
+  endpoint = "http://localhost:14318"
+  token    = "user1_secret"
 }
 
 resource "uptrace_org" "org1" {
@@ -56,7 +55,6 @@ Provider config can also be set via environment variables:
 
 - `UPTRACE_ENDPOINT`
 - `UPTRACE_TOKEN`
-- `UPTRACE_PROJECT_ID`
 
 ## Testing
 

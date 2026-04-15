@@ -2,9 +2,7 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -22,9 +20,8 @@ type UptraceProvider struct {
 }
 
 type uptraceProviderModel struct {
-	Endpoint  types.String `tfsdk:"endpoint"`
-	Token     types.String `tfsdk:"token"`
-	ProjectID types.Int64  `tfsdk:"project_id"`
+	Endpoint types.String `tfsdk:"endpoint"`
+	Token    types.String `tfsdk:"token"`
 }
 
 // New returns a provider factory for use with providerserver.Serve.
@@ -49,16 +46,12 @@ func (p *UptraceProvider) Schema(_ context.Context, _ tfprovider.SchemaRequest, 
 				Optional:  true,
 				Sensitive: true,
 			},
-			"project_id": schema.Int64Attribute{
-				Optional: true,
-			},
 		},
 	}
 }
 
 // Configure resolves provider settings from HCL config or environment
-// variables (UPTRACE_ENDPOINT, UPTRACE_TOKEN, UPTRACE_PROJECT_ID) and builds
-// the shared API client.
+// variables (UPTRACE_ENDPOINT, UPTRACE_TOKEN) and builds the shared API client.
 func (p *UptraceProvider) Configure(ctx context.Context, req tfprovider.ConfigureRequest, resp *tfprovider.ConfigureResponse) {
 	var conf uptraceProviderModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &conf)...)
@@ -82,14 +75,7 @@ func (p *UptraceProvider) Configure(ctx context.Context, req tfprovider.Configur
 		return
 	}
 
-	projectID, err := parseProjectID(conf.ProjectID)
-	if err != nil {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("project_id"), "Invalid project ID", err.Error())
-		return
-	}
-
-	c, err := client.New(endpoint, token, projectID)
+	c, err := client.New(endpoint, token)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create API client", err.Error())
 		return
@@ -122,19 +108,3 @@ func envOrConfig(envKey string, configVal types.String) string {
 	return os.Getenv(envKey)
 }
 
-func parseProjectID(configVal types.Int64) (int64, error) {
-	if !configVal.IsNull() {
-		return configVal.ValueInt64(), nil
-	}
-
-	env := os.Getenv("UPTRACE_PROJECT_ID")
-	if env == "" {
-		return 0, nil
-	}
-
-	id, err := strconv.ParseInt(env, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("cannot parse UPTRACE_PROJECT_ID %q: %w", env, err)
-	}
-	return id, nil
-}

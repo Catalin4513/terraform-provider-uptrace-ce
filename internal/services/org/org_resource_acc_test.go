@@ -37,7 +37,6 @@ func testAccCheckOrgDestroy(s *terraform.State) error {
 	c, err := upClient.New(
 		os.Getenv("UPTRACE_ENDPOINT"),
 		os.Getenv("UPTRACE_TOKEN"),
-		0,
 	)
 	if err != nil {
 		return fmt.Errorf("creating API client: %w", err)
@@ -150,7 +149,6 @@ func deleteOrgOutOfBand(t *testing.T, orgID string) {
 	c, err := upClient.New(
 		os.Getenv("UPTRACE_ENDPOINT"),
 		os.Getenv("UPTRACE_TOKEN"),
-		0,
 	)
 	if err != nil {
 		t.Fatalf("creating API client: %v", err)
