@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	str2duration "github.com/xhit/go-str2duration/v2"
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
@@ -44,14 +45,14 @@ type projectModel struct {
 	DisplayLogSeverity types.Bool   `tfsdk:"display_log_severity"`
 	CountDistinct      types.Bool   `tfsdk:"count_distinct"`
 
-	SpanTimeRange  types.Float64 `tfsdk:"span_time_range"`
-	LogTimeRange   types.Float64 `tfsdk:"log_time_range"`
-	EventTimeRange types.Float64 `tfsdk:"event_time_range"`
+	SpanTimeRange  types.String `tfsdk:"span_time_range"`
+	LogTimeRange   types.String `tfsdk:"log_time_range"`
+	EventTimeRange types.String `tfsdk:"event_time_range"`
 
-	SpanRetention   types.Float64 `tfsdk:"span_retention"`
-	LogRetention    types.Float64 `tfsdk:"log_retention"`
-	EventRetention  types.Float64 `tfsdk:"event_retention"`
-	MetricRetention types.Float64 `tfsdk:"metric_retention"`
+	SpanRetention   types.String `tfsdk:"span_retention"`
+	LogRetention    types.String `tfsdk:"log_retention"`
+	EventRetention  types.String `tfsdk:"event_retention"`
+	MetricRetention types.String `tfsdk:"metric_retention"`
 }
 
 func NewProjectResource() resource.Resource {
@@ -84,10 +85,13 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			stringvalidator.OneOf("none", "v1.25.0", "v1.33.0"),
 		},
 	}
-	optionalFloat64 := func(desc string) schema.Float64Attribute {
-		return schema.Float64Attribute{
+	optionalDuration := func(desc string) schema.StringAttribute {
+		return schema.StringAttribute{
 			Optional:    true,
-			Description: desc,
+			Description: desc + ` Duration string; stdlib units (ns, us, ms, s, m, h) plus d (day) and w (week).`,
+			Validators: []validator.String{
+				durationStringValidator{},
+			},
 		}
 	}
 	resp.Schema = schema.Schema{
@@ -116,14 +120,14 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"display_log_severity":   optionalComputedBool("Display log severity column."),
 			"count_distinct":         optionalComputedBool("Enable count distinct aggregations."),
 
-			"span_time_range":  optionalFloat64("Default span query time range, in milliseconds. Omit to use the server default."),
-			"log_time_range":   optionalFloat64("Default log query time range, in milliseconds. Omit to use the server default."),
-			"event_time_range": optionalFloat64("Default event query time range, in milliseconds. Omit to use the server default."),
+			"span_time_range":  optionalDuration("Default span query time range. Omit to use the server default."),
+			"log_time_range":   optionalDuration("Default log query time range. Omit to use the server default."),
+			"event_time_range": optionalDuration("Default event query time range. Omit to use the server default."),
 
-			"span_retention":   optionalFloat64("Span retention duration, in milliseconds. Omit to use the server default."),
-			"log_retention":    optionalFloat64("Log retention duration, in milliseconds. Omit to use the server default."),
-			"event_retention":  optionalFloat64("Event retention duration, in milliseconds. Omit to use the server default."),
-			"metric_retention": optionalFloat64("Metric retention duration, in milliseconds. Omit to use the server default."),
+			"span_retention":   optionalDuration("Span retention duration. Omit to use the server default."),
+			"log_retention":    optionalDuration("Log retention duration. Omit to use the server default."),
+			"event_retention":  optionalDuration("Event retention duration. Omit to use the server default."),
+			"metric_retention": optionalDuration("Metric retention duration. Omit to use the server default."),
 		},
 	}
 }
@@ -316,38 +320,68 @@ func projectRequestBody(m *projectModel) *generated.ProjectCreateRequest {
 		body.CountDistinct = &v
 	}
 
-	if v := float64PtrIfSet(m.SpanTimeRange); v != nil {
+	if v := durationMillisPtrIfSet(m.SpanTimeRange); v != nil {
 		body.SpanTimeRange = v
 	}
-	if v := float64PtrIfSet(m.LogTimeRange); v != nil {
+	if v := durationMillisPtrIfSet(m.LogTimeRange); v != nil {
 		body.LogTimeRange = v
 	}
-	if v := float64PtrIfSet(m.EventTimeRange); v != nil {
+	if v := durationMillisPtrIfSet(m.EventTimeRange); v != nil {
 		body.EventTimeRange = v
 	}
 
-	if v := float64PtrIfSet(m.SpanRetention); v != nil {
+	if v := durationMillisPtrIfSet(m.SpanRetention); v != nil {
 		body.SpanRetention = v
 	}
-	if v := float64PtrIfSet(m.LogRetention); v != nil {
+	if v := durationMillisPtrIfSet(m.LogRetention); v != nil {
 		body.LogRetention = v
 	}
-	if v := float64PtrIfSet(m.EventRetention); v != nil {
+	if v := durationMillisPtrIfSet(m.EventRetention); v != nil {
 		body.EventRetention = v
 	}
-	if v := float64PtrIfSet(m.MetricRetention); v != nil {
+	if v := durationMillisPtrIfSet(m.MetricRetention); v != nil {
 		body.MetricRetention = v
 	}
 
 	return body
 }
 
-func float64PtrIfSet(v types.Float64) *float64 {
+func durationMillisPtrIfSet(v types.String) *float64 {
 	if v.IsNull() || v.IsUnknown() {
 		return nil
 	}
-	f := v.ValueFloat64()
-	return &f
+	d, err := str2duration.ParseDuration(v.ValueString())
+	if err != nil {
+		return nil
+	}
+	ms := float64(d.Milliseconds())
+	return &ms
+}
+
+type durationStringValidator struct{}
+
+func (durationStringValidator) Description(_ context.Context) string {
+	return `must be a duration string (e.g. "24h", "30d", "1w3d")`
+}
+
+func (v durationStringValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (durationStringValidator) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	d, err := str2duration.ParseDuration(req.ConfigValue.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(req.Path, "invalid duration",
+			fmt.Sprintf("%q is not a valid duration string: %s", req.ConfigValue.ValueString(), err))
+		return
+	}
+	if d < 0 {
+		resp.Diagnostics.AddAttributeError(req.Path, "invalid duration",
+			fmt.Sprintf("%q must not be negative", req.ConfigValue.ValueString()))
+	}
 }
 
 func projectToModel(p *generated.Project, m *projectModel) {

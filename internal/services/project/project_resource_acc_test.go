@@ -27,7 +27,7 @@ resource "uptrace_project" "test" {
 `, orgName, projectName)
 }
 
-func testAccProjectConfigWithRetention(orgName, projectName string, spanRetentionMs, spanTimeRangeMs float64) string {
+func testAccProjectConfigWithRetention(orgName, projectName, spanRetention, spanTimeRange string) string {
 	return fmt.Sprintf(`
 resource "uptrace_org" "test" {
   name = %q
@@ -36,10 +36,10 @@ resource "uptrace_org" "test" {
 resource "uptrace_project" "test" {
   org_id          = uptrace_org.test.id
   name            = %q
-  span_retention  = %v
-  span_time_range = %v
+  span_retention  = %q
+  span_time_range = %q
 }
-`, orgName, projectName, spanRetentionMs, spanTimeRangeMs)
+`, orgName, projectName, spanRetention, spanTimeRange)
 }
 
 func testAccCheckProjectDestroy(t *testing.T) resource.TestCheckFunc {
@@ -105,9 +105,9 @@ func TestAccProject_basic(t *testing.T) {
 
 func TestAccProject_retentionRoundTrip(t *testing.T) {
 	const (
-		spanRetentionMs = float64(672 * 60 * 60 * 1000)  // 672h — server minimum
-		spanTimeRangeMs = float64(6 * 60 * 60 * 1000)    // 6h
-		bumpedMs        = float64(1000 * 60 * 60 * 1000) // 1000h
+		spanRetention = "672h" // server minimum
+		spanTimeRange = "6h"
+		bumped        = "1000h"
 	)
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testutil.PreCheck(t) },
@@ -115,23 +115,23 @@ func TestAccProject_retentionRoundTrip(t *testing.T) {
 		CheckDestroy:             testAccCheckProjectDestroy(t),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccProjectConfigWithRetention("acc-retention-org", "acc-retention-project", spanRetentionMs, spanTimeRangeMs),
+				Config: testAccProjectConfigWithRetention("acc-retention-org", "acc-retention-project", spanRetention, spanTimeRange),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("uptrace_project.test", "span_retention", strconv.FormatFloat(spanRetentionMs, 'f', -1, 64)),
-					resource.TestCheckResourceAttr("uptrace_project.test", "span_time_range", strconv.FormatFloat(spanTimeRangeMs, 'f', -1, 64)),
+					resource.TestCheckResourceAttr("uptrace_project.test", "span_retention", spanRetention),
+					resource.TestCheckResourceAttr("uptrace_project.test", "span_time_range", spanTimeRange),
 				),
 			},
 			{
 				// No change — should be a clean no-op plan despite CE's
 				// Read-side retention override.
-				Config:   testAccProjectConfigWithRetention("acc-retention-org", "acc-retention-project", spanRetentionMs, spanTimeRangeMs),
+				Config:   testAccProjectConfigWithRetention("acc-retention-org", "acc-retention-project", spanRetention, spanTimeRange),
 				PlanOnly: true,
 			},
 			{
 				// User bumps retention — should apply cleanly.
-				Config: testAccProjectConfigWithRetention("acc-retention-org", "acc-retention-project", bumpedMs, spanTimeRangeMs),
+				Config: testAccProjectConfigWithRetention("acc-retention-org", "acc-retention-project", bumped, spanTimeRange),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("uptrace_project.test", "span_retention", strconv.FormatFloat(bumpedMs, 'f', -1, 64)),
+					resource.TestCheckResourceAttr("uptrace_project.test", "span_retention", bumped),
 				),
 			},
 		},

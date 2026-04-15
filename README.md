@@ -134,13 +134,15 @@ Manages an Uptrace project scoped under an organization.
 | semconv_version        | string | no       | One of `none`, `v1.25.0`, `v1.33.0`.                                        |
 | display_log_severity   | bool   | no       | Updatable.                                                                  |
 | count_distinct         | bool   | no       | Updatable.                                                                  |
-| span_time_range        | number | no       | Milliseconds. Default query time range for spans.                           |
-| log_time_range         | number | no       | Milliseconds. Default query time range for logs.                            |
-| event_time_range       | number | no       | Milliseconds. Default query time range for events.                          |
-| span_retention         | number | no       | Milliseconds. Server minimum applies.                                       |
-| log_retention          | number | no       | Milliseconds.                                                               |
-| event_retention        | number | no       | Milliseconds.                                                               |
-| metric_retention       | number | no       | Milliseconds.                                                               |
+| span_time_range        | string | no       | Duration (e.g. `"24h"`). Default query time range for spans.                |
+| log_time_range         | string | no       | Duration. Default query time range for logs.                                |
+| event_time_range       | string | no       | Duration. Default query time range for events.                              |
+| span_retention         | string | no       | Duration (e.g. `"30d"`, `"1y"`). Server minimum applies.                    |
+| log_retention          | string | no       | Duration.                                                                   |
+| event_retention        | string | no       | Duration.                                                                   |
+| metric_retention       | string | no       | Duration.                                                                   |
+
+Duration strings accept the stdlib units `ns`, `us`, `ms`, `s`, `m`, `h` plus `d` (day) and `w` (week).
 | id                     | string | computed |                                                                             |
 
 

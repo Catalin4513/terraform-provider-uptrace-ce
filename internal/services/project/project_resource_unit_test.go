@@ -6,9 +6,20 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
+	str2duration "github.com/xhit/go-str2duration/v2"
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
+
+// durationMs parses a duration string with the same library the resource
+// uses and returns it as float64 milliseconds — the wire representation the
+// server expects.
+func durationMs(t *testing.T, s string) float64 {
+	t.Helper()
+	d, err := str2duration.ParseDuration(s)
+	require.NoError(t, err)
+	return float64(d.Milliseconds())
+}
 
 func TestProjectToModel_fullPayload(t *testing.T) {
 	semconv := generated.V1330
@@ -26,14 +37,14 @@ func TestProjectToModel_fullPayload(t *testing.T) {
 
 	projectToModel(p, &m)
 
-	require.Equal(t, types.StringValue("7"), m.ID)
-	require.Equal(t, types.StringValue("42"), m.OrgID)
-	require.Equal(t, types.StringValue("api"), m.Name)
-	require.Equal(t, types.BoolValue(true), m.GroupByEnv)
-	require.Equal(t, types.BoolValue(false), m.GroupFuncsByService)
-	require.Equal(t, types.StringValue("v1.33.0"), m.SemconvVersion)
-	require.Equal(t, types.BoolValue(true), m.DisplayLogSeverity)
-	require.Equal(t, types.BoolValue(false), m.CountDistinct)
+	require.Equal(t, "7", m.ID.ValueString())
+	require.Equal(t, "42", m.OrgID.ValueString())
+	require.Equal(t, "api", m.Name.ValueString())
+	require.True(t, m.GroupByEnv.ValueBool())
+	require.False(t, m.GroupFuncsByService.ValueBool())
+	require.Equal(t, "v1.33.0", m.SemconvVersion.ValueString())
+	require.True(t, m.DisplayLogSeverity.ValueBool())
+	require.False(t, m.CountDistinct.ValueBool())
 }
 
 func TestProjectToModel_nilOrgID(t *testing.T) {
@@ -44,9 +55,9 @@ func TestProjectToModel_nilOrgID(t *testing.T) {
 
 func TestProjectToModel_retentionAndTimeRangeNotOverwritten(t *testing.T) {
 	m := projectModel{
-		SpanRetention:   types.Float64Value(2_592_000_000), // 720h in ms
-		MetricRetention: types.Float64Value(2_592_000_000),
-		SpanTimeRange:   types.Float64Value(86_400_000), // 24h in ms
+		SpanRetention:   types.StringValue("720h"),
+		MetricRetention: types.StringValue("720h"),
+		SpanTimeRange:   types.StringValue("24h"),
 	}
 	apiResp := &generated.Project{
 		ID:              1,
@@ -58,26 +69,26 @@ func TestProjectToModel_retentionAndTimeRangeNotOverwritten(t *testing.T) {
 
 	projectToModel(apiResp, &m)
 
-	require.Equal(t, types.Float64Value(2_592_000_000), m.SpanRetention,
+	require.Equal(t, "720h", m.SpanRetention.ValueString(),
 		"retention must not be overwritten by the API response")
-	require.Equal(t, types.Float64Value(2_592_000_000), m.MetricRetention)
-	require.Equal(t, types.Float64Value(86_400_000), m.SpanTimeRange)
+	require.Equal(t, "720h", m.MetricRetention.ValueString())
+	require.Equal(t, "24h", m.SpanTimeRange.ValueString())
 }
 
-func TestProjectRequestBody_retentionAndTimeRangePassedThrough(t *testing.T) {
+func TestProjectRequestBody_retentionAndTimeRangeConvertedToMillis(t *testing.T) {
 	m := &projectModel{
 		Name:           types.StringValue("api"),
-		SpanRetention:  types.Float64Value(2_592_000_000),
-		SpanTimeRange:  types.Float64Value(86_400_000),
-		EventRetention: types.Float64Value(0),
+		SpanRetention:  types.StringValue("30d"), // str2duration-only unit
+		SpanTimeRange:  types.StringValue("24h"),
+		EventRetention: types.StringValue("0s"),
 	}
 
 	body := projectRequestBody(m)
 
 	require.NotNil(t, body.SpanRetention)
-	require.Equal(t, float64(2_592_000_000), *body.SpanRetention)
+	require.Equal(t, durationMs(t, "30d"), *body.SpanRetention)
 	require.NotNil(t, body.SpanTimeRange)
-	require.Equal(t, float64(86_400_000), *body.SpanTimeRange)
+	require.Equal(t, durationMs(t, "24h"), *body.SpanTimeRange)
 	// Explicit zero is passed through as the "use default" sentinel.
 	require.NotNil(t, body.EventRetention)
 	require.Equal(t, float64(0), *body.EventRetention)
@@ -99,6 +110,8 @@ func TestProjectRequestBody_unsetFieldsAreOmitted(t *testing.T) {
 	require.Nil(t, body.GroupFuncsByService)
 	require.Nil(t, body.SemconvVersion)
 	require.Nil(t, body.DisplayLogSeverity)
+	require.Nil(t, body.SpanRetention)
+	require.Nil(t, body.MetricRetention)
 }
 
 func TestProjectRequestBody_semconvEnumIsPassedThrough(t *testing.T) {
