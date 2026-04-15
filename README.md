@@ -58,21 +58,49 @@ Provider config can also be set via environment variables:
 - `UPTRACE_TOKEN`
 - `UPTRACE_PROJECT_ID`
 
-## Running tests
+## Testing
 
-Integration tests hit a real Uptrace API, so they need credentials. Copy
-the committed template to a local `.env` and fill it in:
+The project has two layers of tests:
+
+### Unit tests
+
+Unit tests run without any external dependencies and are always safe to run:
+
+```bash
+make test
+```
+
+These test pure helper functions (`orgToModel`, `parseOrgID`) and run in CI
+on every push and pull request.
+
+### Acceptance tests
+
+Acceptance tests exercise the full Terraform lifecycle (plan, apply, import,
+destroy) against a real Uptrace API. They follow the
+[HashiCorp acceptance test conventions](https://developer.hashicorp.com/terraform/plugin/testing/acceptance-tests)
+and are gated behind the `TF_ACC` environment variable.
+
+1. Copy the credentials template and fill it in:
 
 ```bash
 cp .env.example .env
 ```
 
-To keep a created org around for manual inspection in the UI after a
-single-subtest run:
+2. Run acceptance tests:
 
 ```bash
-KEEP_TEST_ORG=1 go test ./internal/services/org/... -v -run 'TestOrgResource_CRUD/create_org$'
+make testacc
 ```
+
+Without `TF_ACC=1`, acceptance tests are automatically skipped.
+
+### Writing tests
+
+- **Unit tests** go in `*_unit_test.go` files with `package <name>` (internal).
+  Use these for pure functions that don't need a running API.
+- **Acceptance tests** go in `*_acc_test.go` files with `package <name>_test` (external).
+  Use the `TestAcc` prefix and `resource.TestCase` with `testutil.ProtoV6ProviderFactories`.
+  Always include `PreCheck`, `CheckDestroy`, and an import step.
 
 ## Commands
 
