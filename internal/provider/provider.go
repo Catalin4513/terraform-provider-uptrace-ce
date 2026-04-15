@@ -40,11 +40,13 @@ func (p *UptraceProvider) Schema(_ context.Context, _ tfprovider.SchemaRequest, 
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"endpoint": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
+				Description: "Uptrace API endpoint. Can also be set with the UPTRACE_ENDPOINT environment variable.",
 			},
 			"token": schema.StringAttribute{
-				Optional:  true,
-				Sensitive: true,
+				Optional:    true,
+				Sensitive:   true,
+				Description: "Uptrace API token. Can also be set with the UPTRACE_TOKEN environment variable.",
 			},
 		},
 	}
@@ -102,7 +104,7 @@ func (p *UptraceProvider) DataSources(_ context.Context) []func() datasource.Dat
 }
 
 func envOrConfig(envKey string, configVal types.String) string {
-	if !configVal.IsNull() {
+	if !configVal.IsNull() && !configVal.IsUnknown() {
 		return configVal.ValueString()
 	}
 	return os.Getenv(envKey)
