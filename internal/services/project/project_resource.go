@@ -113,6 +113,9 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "Project name.",
+				Validators: []validator.String{
+					stringvalidator.UTF8LengthBetween(1, 255),
+				},
 			},
 			"group_by_env":           optionalComputedBool("Group spans by deployment environment."),
 			"group_funcs_by_service": optionalComputedBool("Group functions by service name."),
@@ -165,7 +168,11 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		"name":   plan.Name.ValueString(),
 	})
 
-	body := projectRequestBody(&plan)
+	body, err := projectRequestBody(&plan)
+	if err != nil {
+		resp.Diagnostics.AddError("invalid project configuration", err.Error())
+		return
+	}
 	out, err := r.client.API.CreateProject(ctx, &generated.CreateProjectRequestOptions{
 		PathParams: &generated.CreateProjectPath{OrgID: orgID},
 		Body:       body,
@@ -229,7 +236,11 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 
 	tflog.Info(ctx, "updating project", map[string]any{"id": plan.ID.ValueString()})
 
-	body := projectRequestBody(&plan)
+	body, err := projectRequestBody(&plan)
+	if err != nil {
+		resp.Diagnostics.AddError("invalid project configuration", err.Error())
+		return
+	}
 	out, err := r.client.API.UpdateProject(ctx, &generated.UpdateProjectRequestOptions{
 		PathParams: &generated.UpdateProjectPath{ProjectID: projectID},
 		Body:       body,
@@ -265,7 +276,7 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 	_, err = r.client.API.DeleteProject(ctx, &generated.DeleteProjectRequestOptions{
 		PathParams: &generated.DeleteProjectPath{ProjectID: projectID},
 	})
-	if err != nil && !client.IsNotFound(err) {
+	if err != nil && !client.IsNotFound(err) && !client.IsForbidden(err) {
 		resp.Diagnostics.AddError("delete project failed", err.Error())
 	}
 }
@@ -293,7 +304,7 @@ func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportSt
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
 }
 
-func projectRequestBody(m *projectModel) *generated.ProjectCreateRequest {
+func projectRequestBody(m *projectModel) (*generated.ProjectCreateRequest, error) {
 	body := &generated.ProjectCreateRequest{
 		Name: m.Name.ValueString(),
 	}
@@ -320,42 +331,52 @@ func projectRequestBody(m *projectModel) *generated.ProjectCreateRequest {
 		body.CountDistinct = &v
 	}
 
-	if v := durationMillisPtrIfSet(m.SpanTimeRange); v != nil {
-		body.SpanTimeRange = v
-	}
-	if v := durationMillisPtrIfSet(m.LogTimeRange); v != nil {
-		body.LogTimeRange = v
-	}
-	if v := durationMillisPtrIfSet(m.EventTimeRange); v != nil {
-		body.EventTimeRange = v
-	}
-
-	if v := durationMillisPtrIfSet(m.SpanRetention); v != nil {
-		body.SpanRetention = v
-	}
-	if v := durationMillisPtrIfSet(m.LogRetention); v != nil {
-		body.LogRetention = v
-	}
-	if v := durationMillisPtrIfSet(m.EventRetention); v != nil {
-		body.EventRetention = v
-	}
-	if v := durationMillisPtrIfSet(m.MetricRetention); v != nil {
-		body.MetricRetention = v
+	setDuration := func(field string, src types.String, dst **float64) error {
+		v, err := durationMillisPtrIfSet(src)
+		if err != nil {
+			return fmt.Errorf("%s: %w", field, err)
+		}
+		if v != nil {
+			*dst = v
+		}
+		return nil
 	}
 
-	return body
+	if err := setDuration("span_time_range", m.SpanTimeRange, &body.SpanTimeRange); err != nil {
+		return nil, err
+	}
+	if err := setDuration("log_time_range", m.LogTimeRange, &body.LogTimeRange); err != nil {
+		return nil, err
+	}
+	if err := setDuration("event_time_range", m.EventTimeRange, &body.EventTimeRange); err != nil {
+		return nil, err
+	}
+	if err := setDuration("span_retention", m.SpanRetention, &body.SpanRetention); err != nil {
+		return nil, err
+	}
+	if err := setDuration("log_retention", m.LogRetention, &body.LogRetention); err != nil {
+		return nil, err
+	}
+	if err := setDuration("event_retention", m.EventRetention, &body.EventRetention); err != nil {
+		return nil, err
+	}
+	if err := setDuration("metric_retention", m.MetricRetention, &body.MetricRetention); err != nil {
+		return nil, err
+	}
+
+	return body, nil
 }
 
-func durationMillisPtrIfSet(v types.String) *float64 {
+func durationMillisPtrIfSet(v types.String) (*float64, error) {
 	if v.IsNull() || v.IsUnknown() {
-		return nil
+		return nil, nil
 	}
 	d, err := str2duration.ParseDuration(v.ValueString())
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("invalid duration %q: %w", v.ValueString(), err)
 	}
 	ms := float64(d.Milliseconds())
-	return &ms
+	return &ms, nil
 }
 
 type durationStringValidator struct{}
@@ -420,9 +441,9 @@ func boolFromPtr(v *bool) types.Bool {
 }
 
 func parseProjectID(s string) (int64, error) {
-	return strconv.ParseInt(s, 10, 64)
+	return client.ParseProjectID(s)
 }
 
 func parseOrgID(s string) (uint64, error) {
-	return strconv.ParseUint(s, 10, 64)
+	return client.ParseOrgID(s)
 }

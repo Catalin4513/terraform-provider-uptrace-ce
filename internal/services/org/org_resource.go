@@ -211,7 +211,7 @@ func (r *OrgResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 	_, err = r.client.API.DeleteOrg(ctx, &generated.DeleteOrgRequestOptions{
 		PathParams: &generated.DeleteOrgPath{OrgID: orgID},
 	})
-	if err != nil && !client.IsNotFound(err) {
+	if err != nil && !client.IsNotFound(err) && !client.IsForbidden(err) {
 		resp.Diagnostics.AddError("delete org failed", err.Error())
 	}
 }
@@ -231,5 +231,5 @@ func orgToModel(org *generated.Org, m *orgModel) {
 }
 
 func parseOrgID(s string) (uint64, error) {
-	return strconv.ParseUint(s, 10, 64)
+	return client.ParseOrgID(s)
 }

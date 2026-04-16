@@ -137,13 +137,13 @@ Manages an Uptrace project scoped under an organization.
 | span_time_range        | string | no       | Duration (e.g. `"24h"`). Default query time range for spans.                |
 | log_time_range         | string | no       | Duration. Default query time range for logs.                                |
 | event_time_range       | string | no       | Duration. Default query time range for events.                              |
-| span_retention         | string | no       | Duration (e.g. `"30d"`, `"1y"`). Server minimum applies.                    |
+| span_retention         | string | no       | Duration (e.g. `"30d"`, `"4w"`). Server minimum applies.                    |
 | log_retention          | string | no       | Duration.                                                                   |
 | event_retention        | string | no       | Duration.                                                                   |
 | metric_retention       | string | no       | Duration.                                                                   |
+| id                     | string | computed |                                                                             |
 
 Duration strings accept the stdlib units `ns`, `us`, `ms`, `s`, `m`, `h` plus `d` (day) and `w` (week).
-| id                     | string | computed |                                                                             |
 
 
 ## Files not in git

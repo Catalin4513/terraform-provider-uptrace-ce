@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
@@ -51,14 +52,22 @@ func New(endpoint, token string) (*Client, error) {
 	}, nil
 }
 
-// IsNotFound reports whether err indicates the resource does not exist.
+// IsNotFound reports whether err is an API 404 error.
 func IsNotFound(err error) bool {
+	return hasStatusCode(err, http.StatusNotFound)
+}
+
+// IsForbidden reports whether err is an API 403 error.
+func IsForbidden(err error) bool {
+	return hasStatusCode(err, http.StatusForbidden)
+}
+
+func hasStatusCode(err error, code int) bool {
 	clientErr, ok := errors.AsType[*runtime.ClientAPIError](err)
 	if !ok {
 		return false
 	}
-	code := clientErr.StatusCode()
-	return code == http.StatusNotFound || code == http.StatusForbidden
+	return clientErr.StatusCode() == code
 }
 
 // httpDoerAdapter adapts a standard *http.Client to the runtime.HttpRequestDoer
@@ -69,4 +78,14 @@ type httpDoerAdapter struct {
 
 func (a *httpDoerAdapter) Do(ctx context.Context, req *http.Request) (*http.Response, error) {
 	return a.client.Do(req.WithContext(ctx))
+}
+
+// ParseOrgID parses a string organization ID into a uint64.
+func ParseOrgID(s string) (uint64, error) {
+	return strconv.ParseUint(s, 10, 64)
+}
+
+// ParseProjectID parses a string project ID into an int64.
+func ParseProjectID(s string) (int64, error) {
+	return strconv.ParseInt(s, 10, 64)
 }

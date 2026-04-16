@@ -83,7 +83,8 @@ func TestProjectRequestBody_retentionAndTimeRangeConvertedToMillis(t *testing.T)
 		EventRetention: types.StringValue("0s"),
 	}
 
-	body := projectRequestBody(m)
+	body, err := projectRequestBody(m)
+	require.NoError(t, err)
 
 	require.NotNil(t, body.SpanRetention)
 	require.Equal(t, durationMs(t, "30d"), *body.SpanRetention)
@@ -102,7 +103,8 @@ func TestProjectRequestBody_unsetFieldsAreOmitted(t *testing.T) {
 		GroupByEnv: types.BoolValue(true),
 	}
 
-	body := projectRequestBody(m)
+	body, err := projectRequestBody(m)
+	require.NoError(t, err)
 
 	require.Equal(t, "api", body.Name)
 	require.NotNil(t, body.GroupByEnv)
@@ -120,7 +122,8 @@ func TestProjectRequestBody_semconvEnumIsPassedThrough(t *testing.T) {
 		SemconvVersion: types.StringValue("v1.25.0"),
 	}
 
-	body := projectRequestBody(m)
+	body, err := projectRequestBody(m)
+	require.NoError(t, err)
 
 	require.NotNil(t, body.SemconvVersion)
 	require.Equal(t, generated.ProjectCreateRequestSemconvVersionV1250, *body.SemconvVersion)
