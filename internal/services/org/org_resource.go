@@ -139,6 +139,12 @@ func (r *OrgResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 			resp.State.RemoveResource(ctx)
 			return
 		}
+		// CE returns 403 for orgs that have been deleted; treat as gone.
+		if client.IsForbidden(err) {
+			tflog.Warn(ctx, "org returned 403, treating as deleted", map[string]any{"id": state.ID.ValueString()})
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError("read org failed", err.Error())
 		return
 	}

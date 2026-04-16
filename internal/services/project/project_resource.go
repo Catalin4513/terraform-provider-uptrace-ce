@@ -209,6 +209,12 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 			resp.State.RemoveResource(ctx)
 			return
 		}
+		// CE returns 403 for projects that have been deleted; treat as gone.
+		if client.IsForbidden(err) {
+			tflog.Warn(ctx, "project returned 403, treating as deleted", map[string]any{"id": state.ID.ValueString()})
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError("read project failed", err.Error())
 		return
 	}
