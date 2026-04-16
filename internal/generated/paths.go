@@ -6,7 +6,7 @@ import (
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
 )
 
-type ProjectID = int64
+type ProjectID = uint32
 
 type OrgID = uint64
 

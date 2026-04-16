@@ -49,12 +49,12 @@ func testAccCheckProjectDestroy(t *testing.T) resource.TestCheckFunc {
 			if rs.Type != "uptrace_project" {
 				continue
 			}
-			projectID, err := strconv.ParseInt(rs.Primary.ID, 10, 64)
+			projectID, err := strconv.ParseUint(rs.Primary.ID, 10, 32)
 			if err != nil {
 				return fmt.Errorf("invalid project ID %q: %w", rs.Primary.ID, err)
 			}
 			_, err = c.API.GetProject(context.Background(), &generated.GetProjectRequestOptions{
-				PathParams: &generated.GetProjectPath{ProjectID: projectID},
+				PathParams: &generated.GetProjectPath{ProjectID: uint32(projectID)},
 			})
 			if err == nil {
 				return fmt.Errorf("project %s still exists after destroy", rs.Primary.ID)
@@ -185,14 +185,14 @@ func deleteProjectOutOfBand(t *testing.T, projectID string) {
 		t.Fatal("project ID was not captured before out-of-band delete")
 	}
 
-	id, err := strconv.ParseInt(projectID, 10, 64)
+	id, err := strconv.ParseUint(projectID, 10, 32)
 	if err != nil {
 		t.Fatalf("invalid project ID %q: %v", projectID, err)
 	}
 
 	c := testutil.TestAccClient(t)
 	_, err = c.API.DeleteProject(context.Background(), &generated.DeleteProjectRequestOptions{
-		PathParams: &generated.DeleteProjectPath{ProjectID: id},
+		PathParams: &generated.DeleteProjectPath{ProjectID: uint32(id)},
 	})
 	if err != nil && !client.IsNotFound(err) && !client.IsForbidden(err) {
 		t.Fatalf("delete project %d out-of-band: %v", id, err)
