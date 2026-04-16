@@ -446,7 +446,7 @@ func boolFromPtr(v *bool) types.Bool {
 	return types.BoolValue(*v)
 }
 
-func parseProjectID(s string) (int64, error) {
+func parseProjectID(s string) (uint32, error) {
 	return client.ParseProjectID(s)
 }
 

@@ -132,7 +132,7 @@ func TestProjectRequestBody_semconvEnumIsPassedThrough(t *testing.T) {
 func TestParseProjectID_valid(t *testing.T) {
 	id, err := parseProjectID("123")
 	require.NoError(t, err)
-	require.Equal(t, int64(123), id)
+	require.Equal(t, uint32(123), id)
 }
 
 func TestParseProjectID_invalid(t *testing.T) {

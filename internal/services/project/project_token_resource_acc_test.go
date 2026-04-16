@@ -60,13 +60,13 @@ func testAccCheckProjectTokenDestroy(t *testing.T) resource.TestCheckFunc {
 			if err != nil {
 				return fmt.Errorf("invalid token ID %q: %w", rs.Primary.ID, err)
 			}
-			projectID, err := strconv.ParseInt(rs.Primary.Attributes["project_id"], 10, 64)
+			projectID, err := strconv.ParseUint(rs.Primary.Attributes["project_id"], 10, 32)
 			if err != nil {
 				return fmt.Errorf("invalid project ID %q: %w", rs.Primary.Attributes["project_id"], err)
 			}
 			_, err = c.API.GetProjectToken(context.Background(), &generated.GetProjectTokenRequestOptions{
 				PathParams: &generated.GetProjectTokenPath{
-					ProjectID: projectID,
+					ProjectID: uint32(projectID),
 					TokenID:   tokenID,
 				},
 			})
@@ -204,7 +204,7 @@ func deleteProjectTokenOutOfBand(t *testing.T, projectIDStr, tokenIDStr string) 
 		t.Fatal("project ID or token ID was not captured before out-of-band delete")
 	}
 
-	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
 	if err != nil {
 		t.Fatalf("invalid project ID %q: %v", projectIDStr, err)
 	}
@@ -216,7 +216,7 @@ func deleteProjectTokenOutOfBand(t *testing.T, projectIDStr, tokenIDStr string) 
 	c := testutil.TestAccClient(t)
 	_, err = c.API.DeleteProjectToken(context.Background(), &generated.DeleteProjectTokenRequestOptions{
 		PathParams: &generated.DeleteProjectTokenPath{
-			ProjectID: projectID,
+			ProjectID: uint32(projectID),
 			TokenID:   tokenID,
 		},
 	})
