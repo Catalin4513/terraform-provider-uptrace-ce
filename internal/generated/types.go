@@ -234,35 +234,35 @@ type Project struct {
 	SpanQuery           *string                `json:"spanQuery,omitempty"`
 	SpanColumns         []string               `json:"spanColumns,omitempty"`
 
-	// SpanTimeRange Duration string (e.g., 24h).
-	SpanTimeRange *string `json:"spanTimeRange,omitempty" jsonschema:"Duration string (e.g., 24h)."`
+	// SpanTimeRange Duration in milliseconds (e.g., 86400000 for 24h).
+	SpanTimeRange *float64 `json:"spanTimeRange,omitempty" jsonschema:"Duration in milliseconds (e.g., 86400000 for 24h)."`
 
-	// SpanRetention Duration string (e.g., 720h).
-	SpanRetention *string  `json:"spanRetention,omitempty" jsonschema:"Duration string (e.g., 720h)."`
+	// SpanRetention Duration in milliseconds (e.g., 2592000000 for 720h).
+	SpanRetention *float64 `json:"spanRetention,omitempty" jsonschema:"Duration in milliseconds (e.g., 2592000000 for 720h)."`
 	LogQuery      *string  `json:"logQuery,omitempty"`
 	LogColumns    []string `json:"logColumns,omitempty"`
 
-	// LogTimeRange Duration string (e.g., 24h).
-	LogTimeRange *string `json:"logTimeRange,omitempty" jsonschema:"Duration string (e.g., 24h)."`
+	// LogTimeRange Duration in milliseconds (e.g., 86400000 for 24h).
+	LogTimeRange *float64 `json:"logTimeRange,omitempty" jsonschema:"Duration in milliseconds (e.g., 86400000 for 24h)."`
 
-	// LogRetention Duration string (e.g., 720h).
-	LogRetention *string  `json:"logRetention,omitempty" jsonschema:"Duration string (e.g., 720h)."`
+	// LogRetention Duration in milliseconds (e.g., 2592000000 for 720h).
+	LogRetention *float64 `json:"logRetention,omitempty" jsonschema:"Duration in milliseconds (e.g., 2592000000 for 720h)."`
 	EventQuery   *string  `json:"eventQuery,omitempty"`
 	EventColumns []string `json:"eventColumns,omitempty"`
 
-	// EventTimeRange Duration string (e.g., 24h).
-	EventTimeRange *string `json:"eventTimeRange,omitempty" jsonschema:"Duration string (e.g., 24h)."`
+	// EventTimeRange Duration in milliseconds (e.g., 86400000 for 24h).
+	EventTimeRange *float64 `json:"eventTimeRange,omitempty" jsonschema:"Duration in milliseconds (e.g., 86400000 for 24h)."`
 
-	// EventRetention Duration string (e.g., 720h).
-	EventRetention *string  `json:"eventRetention,omitempty" jsonschema:"Duration string (e.g., 720h)."`
+	// EventRetention Duration in milliseconds (e.g., 2592000000 for 720h).
+	EventRetention *float64 `json:"eventRetention,omitempty" jsonschema:"Duration in milliseconds (e.g., 2592000000 for 720h)."`
 	TraceQuery     *string  `json:"traceQuery,omitempty"`
 	TraceColumns   []string `json:"traceColumns,omitempty"`
 
-	// TraceTimeRange Duration string (e.g., 24h).
-	TraceTimeRange *string `json:"traceTimeRange,omitempty" jsonschema:"Duration string (e.g., 24h)."`
+	// TraceTimeRange Duration in milliseconds (e.g., 86400000 for 24h).
+	TraceTimeRange *float64 `json:"traceTimeRange,omitempty" jsonschema:"Duration in milliseconds (e.g., 86400000 for 24h)."`
 
-	// MetricRetention Duration string (e.g., 720h).
-	MetricRetention *string `json:"metricRetention,omitempty" jsonschema:"Duration string (e.g., 720h)."`
+	// MetricRetention Duration in milliseconds (e.g., 2592000000 for 720h).
+	MetricRetention *float64 `json:"metricRetention,omitempty" jsonschema:"Duration in milliseconds (e.g., 2592000000 for 720h)."`
 
 	// CreatedAt Unix timestamp in nanoseconds.
 	CreatedAt *float32 `json:"createdAt,omitempty" jsonschema:"Unix timestamp in nanoseconds."`
@@ -327,26 +327,26 @@ type ProjectCreateRequest struct {
 	DisplayLogSeverity  *bool                               `json:"displayLogSeverity,omitempty"`
 	CountDistinct       *bool                               `json:"countDistinct,omitempty"`
 
-	// SpanTimeRange Duration string (e.g., 24h).
-	SpanTimeRange *string `json:"spanTimeRange,omitempty" jsonschema:"Duration string (e.g., 24h)."`
+	// SpanTimeRange Duration in milliseconds (e.g., 86400000 for 24h).
+	SpanTimeRange *float64 `json:"spanTimeRange,omitempty" jsonschema:"Duration in milliseconds (e.g., 86400000 for 24h)."`
 
-	// LogTimeRange Duration string (e.g., 24h).
-	LogTimeRange *string `json:"logTimeRange,omitempty" jsonschema:"Duration string (e.g., 24h)."`
+	// LogTimeRange Duration in milliseconds (e.g., 86400000 for 24h).
+	LogTimeRange *float64 `json:"logTimeRange,omitempty" jsonschema:"Duration in milliseconds (e.g., 86400000 for 24h)."`
 
-	// EventTimeRange Duration string (e.g., 24h).
-	EventTimeRange *string `json:"eventTimeRange,omitempty" jsonschema:"Duration string (e.g., 24h)."`
+	// EventTimeRange Duration in milliseconds (e.g., 86400000 for 24h).
+	EventTimeRange *float64 `json:"eventTimeRange,omitempty" jsonschema:"Duration in milliseconds (e.g., 86400000 for 24h)."`
 
-	// SpanRetention Duration string (e.g., 720h).
-	SpanRetention *string `json:"spanRetention,omitempty" jsonschema:"Duration string (e.g., 720h)."`
+	// SpanRetention Duration in milliseconds (e.g., 2592000000 for 720h).
+	SpanRetention *float64 `json:"spanRetention,omitempty" jsonschema:"Duration in milliseconds (e.g., 2592000000 for 720h)."`
 
-	// LogRetention Duration string (e.g., 720h).
-	LogRetention *string `json:"logRetention,omitempty" jsonschema:"Duration string (e.g., 720h)."`
+	// LogRetention Duration in milliseconds (e.g., 2592000000 for 720h).
+	LogRetention *float64 `json:"logRetention,omitempty" jsonschema:"Duration in milliseconds (e.g., 2592000000 for 720h)."`
 
-	// EventRetention Duration string (e.g., 720h).
-	EventRetention *string `json:"eventRetention,omitempty" jsonschema:"Duration string (e.g., 720h)."`
+	// EventRetention Duration in milliseconds (e.g., 2592000000 for 720h).
+	EventRetention *float64 `json:"eventRetention,omitempty" jsonschema:"Duration in milliseconds (e.g., 2592000000 for 720h)."`
 
-	// MetricRetention Duration string (e.g., 720h).
-	MetricRetention *string `json:"metricRetention,omitempty" jsonschema:"Duration string (e.g., 720h)."`
+	// MetricRetention Duration in milliseconds (e.g., 2592000000 for 720h).
+	MetricRetention *float64 `json:"metricRetention,omitempty" jsonschema:"Duration in milliseconds (e.g., 2592000000 for 720h)."`
 }
 
 func (p ProjectCreateRequest) Validate() error {

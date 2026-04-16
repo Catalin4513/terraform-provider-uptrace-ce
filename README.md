@@ -121,6 +121,31 @@ Manages an Uptrace organization.
 | budget | float  | no       | Updatable. Uses the API default when omitted on create. Removing it later keeps the current API budget because Uptrace does not expose an unset/reset operation. |
 | id     | string | computed |                                |
 
+### uptrace_project
+
+Manages an Uptrace project scoped under an organization.
+
+| Field                  | Type   | Required | Note                                                                        |
+|------------------------|--------|----------|-----------------------------------------------------------------------------|
+| org_id                 | string | yes      | Forces replacement on change.                                               |
+| name                   | string | yes      | Updatable.                                                                  |
+| group_by_env           | bool   | no       | Updatable.                                                                  |
+| group_funcs_by_service | bool   | no       | Updatable.                                                                  |
+| semconv_version        | string | no       | One of `none`, `v1.25.0`, `v1.33.0`.                                        |
+| display_log_severity   | bool   | no       | Updatable.                                                                  |
+| count_distinct         | bool   | no       | Updatable.                                                                  |
+| span_time_range        | string | no       | Duration (e.g. `"24h"`). Default query time range for spans.                |
+| log_time_range         | string | no       | Duration. Default query time range for logs.                                |
+| event_time_range       | string | no       | Duration. Default query time range for events.                              |
+| span_retention         | string | no       | Duration (e.g. `"30d"`, `"4w"`). Server minimum applies.                    |
+| log_retention          | string | no       | Duration.                                                                   |
+| event_retention        | string | no       | Duration.                                                                   |
+| metric_retention       | string | no       | Duration.                                                                   |
+| id                     | string | computed |                                                                             |
+
+Duration strings accept the stdlib units `ns`, `us`, `ms`, `s`, `m`, `h` plus `d` (day) and `w` (week).
+
+
 ## Files not in git
 
 The `.gitignore` excludes files generated locally:
