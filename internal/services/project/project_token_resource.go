@@ -1,0 +1,294 @@
+package project
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
+
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
+)
+
+var (
+	_ resource.Resource                = &ProjectTokenResource{}
+	_ resource.ResourceWithConfigure   = &ProjectTokenResource{}
+	_ resource.ResourceWithImportState = &ProjectTokenResource{}
+)
+
+type ProjectTokenResource struct {
+	client *client.Client
+}
+
+type projectTokenModel struct {
+	ID        types.String `tfsdk:"id"`
+	ProjectID types.String `tfsdk:"project_id"`
+	Name      types.String `tfsdk:"name"`
+	Token     types.String `tfsdk:"token"`
+	DSN       types.String `tfsdk:"dsn"`
+}
+
+func NewProjectTokenResource() resource.Resource {
+	return &ProjectTokenResource{}
+}
+
+func (r *ProjectTokenResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_project_token"
+}
+
+func (r *ProjectTokenResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed:    true,
+				Description: "Token ID.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"project_id": schema.StringAttribute{
+				Required:    true,
+				Description: "Project ID this token belongs to. Changing this forces recreation.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"name": schema.StringAttribute{
+				Optional:    true,
+				Description: "Human-readable token name. Removing this attribute clears the name.",
+			},
+			"token": schema.StringAttribute{
+				Computed:    true,
+				Sensitive:   true,
+				Description: "The secret token string. Generated server-side.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"dsn": schema.StringAttribute{
+				Computed:    true,
+				Sensitive:   true,
+				Description: "Computed DSN (ingest URL with token embedded).",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+		},
+	}
+}
+
+func (r *ProjectTokenResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+
+	c, ok := req.ProviderData.(*client.Client)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"unexpected provider data type",
+			fmt.Sprintf("expected *client.Client, got %T", req.ProviderData))
+		return
+	}
+	r.client = c
+}
+
+func (r *ProjectTokenResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan projectTokenModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	projectID, err := parseProjectID(plan.ProjectID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("invalid project_id", err.Error())
+		return
+	}
+
+	tflog.Info(ctx, "creating project token", map[string]any{
+		"project_id": plan.ProjectID.ValueString(),
+	})
+
+	body := &generated.ProjectTokenCreateRequest{}
+	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
+		name := plan.Name.ValueString()
+		body.Name = &name
+	}
+
+	out, err := r.client.API.CreateProjectToken(ctx, &generated.CreateProjectTokenRequestOptions{
+		PathParams: &generated.CreateProjectTokenPath{ProjectID: projectID},
+		Body:       body,
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("create project token failed", err.Error())
+		return
+	}
+
+	projectTokenToModel(&out.Token, &plan)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+func (r *ProjectTokenResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state projectTokenModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	projectID, err := parseProjectID(state.ProjectID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("invalid project_id", err.Error())
+		return
+	}
+
+	tokenID, err := parseTokenID(state.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("invalid token ID", err.Error())
+		return
+	}
+
+	out, err := r.client.API.GetProjectToken(ctx, &generated.GetProjectTokenRequestOptions{
+		PathParams: &generated.GetProjectTokenPath{
+			ProjectID: projectID,
+			TokenID:   tokenID,
+		},
+	})
+	if err != nil {
+		if client.IsNotFound(err) || client.IsForbidden(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		resp.Diagnostics.AddError("read project token failed", err.Error())
+		return
+	}
+
+	projectTokenToModel(&out.Token, &state)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+}
+
+func (r *ProjectTokenResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan, state projectTokenModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	projectID, err := parseProjectID(plan.ProjectID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("invalid project_id", err.Error())
+		return
+	}
+
+	tokenID, err := parseTokenID(plan.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("invalid token ID", err.Error())
+		return
+	}
+
+	tflog.Info(ctx, "updating project token", map[string]any{"id": plan.ID.ValueString()})
+
+	name := plan.Name.ValueString()
+	out, err := r.client.API.UpdateProjectToken(ctx, &generated.UpdateProjectTokenRequestOptions{
+		PathParams: &generated.UpdateProjectTokenPath{
+			ProjectID: projectID,
+			TokenID:   tokenID,
+		},
+		Body: &generated.ProjectTokenUpdateRequest{
+			Name: name,
+		},
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("update project token failed", err.Error())
+		return
+	}
+
+	projectTokenToModel(&out.Token, &plan)
+
+	plan.DSN = state.DSN
+	plan.Token = state.Token
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+func (r *ProjectTokenResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state projectTokenModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	projectID, err := parseProjectID(state.ProjectID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("invalid project_id", err.Error())
+		return
+	}
+
+	tokenID, err := parseTokenID(state.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("invalid token ID", err.Error())
+		return
+	}
+
+	tflog.Info(ctx, "deleting project token", map[string]any{"id": state.ID.ValueString()})
+
+	_, err = r.client.API.DeleteProjectToken(ctx, &generated.DeleteProjectTokenRequestOptions{
+		PathParams: &generated.DeleteProjectTokenPath{
+			ProjectID: projectID,
+			TokenID:   tokenID,
+		},
+	})
+	if err != nil && !client.IsNotFound(err) && !client.IsForbidden(err) {
+		resp.Diagnostics.AddError("delete project token failed", err.Error())
+	}
+}
+
+// ImportState accepts "<project_id>:<token_id>".
+func (r *ProjectTokenResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	parts := strings.Split(req.ID, ":")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		resp.Diagnostics.AddError(
+			"invalid import ID",
+			fmt.Sprintf("expected format <project_id>:<token_id>, got %q", req.ID),
+		)
+		return
+	}
+	if _, err := parseProjectID(parts[0]); err != nil {
+		resp.Diagnostics.AddError("invalid project_id in import ID", err.Error())
+		return
+	}
+	if _, err := parseTokenID(parts[1]); err != nil {
+		resp.Diagnostics.AddError("invalid token_id in import ID", err.Error())
+		return
+	}
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), parts[0])...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
+}
+
+func projectTokenToModel(t *generated.ProjectToken, m *projectTokenModel) {
+	m.ID = types.StringValue(strconv.FormatUint(t.ID, 10))
+	m.Token = types.StringValue(t.Token)
+
+	if t.Name != nil && *t.Name != "" {
+		m.Name = types.StringValue(*t.Name)
+	} else {
+		m.Name = types.StringNull()
+	}
+
+	if t.Dsn != nil {
+		m.DSN = types.StringValue(*t.Dsn)
+	} else {
+		m.DSN = types.StringNull()
+	}
+}
+
+func parseTokenID(s string) (uint64, error) {
+	return client.ParseTokenID(s)
+}

@@ -335,6 +335,28 @@ type DeleteProjectResponse = ProjectResponse
 
 type DeleteProjectErrorResponse = Unauthorized
 
+type ListProjectTokensResponse struct {
+	Tokens []ProjectToken `json:"tokens" validate:"required"`
+}
+
+type ListProjectTokensErrorResponse = Unauthorized
+
+type CreateProjectTokenResponse = ProjectTokenResponse
+
+type CreateProjectTokenErrorResponse = Unauthorized
+
+type GetProjectTokenResponse = ProjectTokenResponse
+
+type GetProjectTokenErrorResponse = Unauthorized
+
+type UpdateProjectTokenResponse = ProjectTokenResponse
+
+type UpdateProjectTokenErrorResponse = Unauthorized
+
+type DeleteProjectTokenResponse = ProjectTokenResponse
+
+type DeleteProjectTokenErrorResponse = Unauthorized
+
 type GetCurrentUserResponse struct {
 	// User A registered user account.
 	User     User      `json:"user" jsonschema:"A registered user account."`

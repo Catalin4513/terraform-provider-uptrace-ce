@@ -176,6 +176,10 @@ type CreateProjectBody = ProjectCreateRequest
 
 type UpdateProjectBody = ProjectCreateRequest
 
+type CreateProjectTokenBody = ProjectTokenCreateRequest
+
+type UpdateProjectTokenBody = ProjectTokenUpdateRequest
+
 type CreateNotificationChannelBody = NotificationChannelRequest
 
 type UpdateNotificationChannelBody = NotificationChannelRequest

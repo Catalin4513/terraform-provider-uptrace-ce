@@ -2708,6 +2708,63 @@ func (n NotificationChannelResponse) Validate() error {
 	return errors
 }
 
+// ProjectToken A project authentication token with its computed DSN.
+type ProjectToken struct {
+	// ID Token ID.
+	ID uint64 `json:"id" jsonschema:"Token ID." validate:"required"`
+
+	// ProjectID Project ID this token belongs to.
+	ProjectID uint32 `json:"projectId" jsonschema:"Project ID this token belongs to." validate:"required"`
+
+	// Name Human-readable token name.
+	Name *string `json:"name,omitempty" jsonschema:"Human-readable token name."`
+
+	// Token The secret token string.
+	Token string `json:"token" jsonschema:"The secret token string." validate:"required"`
+
+	// Dsn Computed DSN (ingest URL with token embedded).
+	Dsn *string `json:"dsn,omitempty" jsonschema:"Computed DSN (ingest URL with token embedded)."`
+
+	// CreatedAt Unix timestamp in nanoseconds.
+	CreatedAt *float32 `json:"createdAt,omitempty" jsonschema:"Unix timestamp in nanoseconds."`
+}
+
+func (p ProjectToken) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(p))
+}
+
+type ProjectTokenCreateRequest struct {
+	// Name Human-readable token name.
+	Name *string `json:"name,omitempty" jsonschema:"Human-readable token name."`
+}
+
+type ProjectTokenUpdateRequest struct {
+	// Name Human-readable token name.
+	Name string `json:"name" jsonschema:"Human-readable token name." validate:"required"`
+}
+
+func (p ProjectTokenUpdateRequest) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(p))
+}
+
+type ProjectTokenResponse struct {
+	// Token A project authentication token with its computed DSN.
+	Token ProjectToken `json:"token" jsonschema:"A project authentication token with its computed DSN."`
+}
+
+func (p ProjectTokenResponse) Validate() error {
+	var errors runtime.ValidationErrors
+	if v, ok := any(p.Token).(runtime.Validator); ok {
+		if err := v.Validate(); err != nil {
+			errors = errors.Append("Token", err)
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
 type UpdateGridLayoutBody_Items []UpdateGridLayoutBody_Items_Item
 
 func (u UpdateGridLayoutBody_Items) Validate() error {

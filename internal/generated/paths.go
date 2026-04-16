@@ -16,6 +16,8 @@ type MonitorID = int64
 
 type DashboardID = int64
 
+type TokenID = uint64
+
 type ChannelID = int64
 
 type GridItemID = int64
@@ -571,6 +573,60 @@ type DeleteProjectPath struct {
 }
 
 func (d DeleteProjectPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(d))
+}
+
+type ListProjectTokensPath struct {
+	// ProjectID Uptrace project ID.
+	ProjectID ProjectID `json:"project_id" jsonschema:"Uptrace project ID." validate:"required"`
+}
+
+func (l ListProjectTokensPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(l))
+}
+
+type CreateProjectTokenPath struct {
+	// ProjectID Uptrace project ID.
+	ProjectID ProjectID `json:"project_id" jsonschema:"Uptrace project ID." validate:"required"`
+}
+
+func (c CreateProjectTokenPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(c))
+}
+
+type GetProjectTokenPath struct {
+	// ProjectID Uptrace project ID.
+	ProjectID ProjectID `json:"project_id" jsonschema:"Uptrace project ID." validate:"required"`
+
+	// TokenID Project token ID.
+	TokenID TokenID `json:"token_id" jsonschema:"Project token ID." validate:"required"`
+}
+
+func (g GetProjectTokenPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(g))
+}
+
+type UpdateProjectTokenPath struct {
+	// ProjectID Uptrace project ID.
+	ProjectID ProjectID `json:"project_id" jsonschema:"Uptrace project ID." validate:"required"`
+
+	// TokenID Project token ID.
+	TokenID TokenID `json:"token_id" jsonschema:"Project token ID." validate:"required"`
+}
+
+func (u UpdateProjectTokenPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(u))
+}
+
+type DeleteProjectTokenPath struct {
+	// ProjectID Uptrace project ID.
+	ProjectID ProjectID `json:"project_id" jsonschema:"Uptrace project ID." validate:"required"`
+
+	// TokenID Project token ID.
+	TokenID TokenID `json:"token_id" jsonschema:"Project token ID." validate:"required"`
+}
+
+func (d DeleteProjectTokenPath) Validate() error {
 	return runtime.ConvertValidatorError(typesValidator.Struct(d))
 }
 

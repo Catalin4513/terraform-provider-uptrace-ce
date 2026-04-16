@@ -1,0 +1,226 @@
+package project_test
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"testing"
+
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
+
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/testutil"
+)
+
+func testAccProjectTokenConfig(orgName, projectName string) string {
+	return fmt.Sprintf(`
+resource "uptrace_org" "test" {
+  name = %q
+}
+
+resource "uptrace_project" "test" {
+  org_id = uptrace_org.test.id
+  name   = %q
+}
+
+resource "uptrace_project_token" "test" {
+  project_id = uptrace_project.test.id
+}
+`, orgName, projectName)
+}
+
+func testAccProjectTokenConfigWithName(orgName, projectName, tokenName string) string {
+	return fmt.Sprintf(`
+resource "uptrace_org" "test" {
+  name = %q
+}
+
+resource "uptrace_project" "test" {
+  org_id = uptrace_org.test.id
+  name   = %q
+}
+
+resource "uptrace_project_token" "test" {
+  project_id = uptrace_project.test.id
+  name       = %q
+}
+`, orgName, projectName, tokenName)
+}
+
+func testAccCheckProjectTokenDestroy(t *testing.T) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		c := testutil.TestAccClient(t)
+		for _, rs := range s.RootModule().Resources {
+			if rs.Type != "uptrace_project_token" {
+				continue
+			}
+			tokenID, err := strconv.ParseUint(rs.Primary.ID, 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid token ID %q: %w", rs.Primary.ID, err)
+			}
+			projectID, err := strconv.ParseInt(rs.Primary.Attributes["project_id"], 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid project ID %q: %w", rs.Primary.Attributes["project_id"], err)
+			}
+			_, err = c.API.GetProjectToken(context.Background(), &generated.GetProjectTokenRequestOptions{
+				PathParams: &generated.GetProjectTokenPath{
+					ProjectID: projectID,
+					TokenID:   tokenID,
+				},
+			})
+			if err == nil {
+				return fmt.Errorf("project token %s still exists after destroy", rs.Primary.ID)
+			}
+			if !client.IsNotFound(err) && !client.IsForbidden(err) {
+				return fmt.Errorf("checking project token %s after destroy: %w", rs.Primary.ID, err)
+			}
+		}
+		return nil
+	}
+}
+
+func TestAccProjectToken_basic(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
+		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckProjectTokenDestroy(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProjectTokenConfig("acc-token-org", "acc-token-project"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("uptrace_project_token.test", "id"),
+					resource.TestCheckResourceAttrSet("uptrace_project_token.test", "project_id"),
+					resource.TestCheckResourceAttrSet("uptrace_project_token.test", "token"),
+					resource.TestCheckResourceAttrSet("uptrace_project_token.test", "dsn"),
+				),
+			},
+			{
+				Config: testAccProjectTokenConfigWithName("acc-token-org", "acc-token-project", "renamed"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_project_token.test", "name", "renamed"),
+					resource.TestCheckResourceAttrSet("uptrace_project_token.test", "token"),
+				),
+			},
+			{
+				ResourceName:      "uptrace_project_token.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs, ok := s.RootModule().Resources["uptrace_project_token.test"]
+					if !ok {
+						return "", fmt.Errorf("uptrace_project_token.test not found in state")
+					}
+					return fmt.Sprintf("%s:%s", rs.Primary.Attributes["project_id"], rs.Primary.ID), nil
+				},
+			},
+		},
+	})
+}
+
+func TestAccProjectToken_withName(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
+		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckProjectTokenDestroy(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProjectTokenConfigWithName("acc-token-name-org", "acc-token-name-project", "ci-ingest"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_project_token.test", "name", "ci-ingest"),
+					resource.TestCheckResourceAttrSet("uptrace_project_token.test", "token"),
+					resource.TestCheckResourceAttrSet("uptrace_project_token.test", "dsn"),
+				),
+			},
+			{
+				Config:   testAccProjectTokenConfigWithName("acc-token-name-org", "acc-token-name-project", "ci-ingest"),
+				PlanOnly: true,
+			},
+			{
+				Config: testAccProjectTokenConfig("acc-token-name-org", "acc-token-name-project"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("uptrace_project_token.test", "name"),
+					resource.TestCheckResourceAttrSet("uptrace_project_token.test", "token"),
+				),
+			},
+			{
+				Config:   testAccProjectTokenConfig("acc-token-name-org", "acc-token-name-project"),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
+func TestAccProjectToken_disappearsOutOfBand(t *testing.T) {
+	config := testAccProjectTokenConfig("acc-disappear-token-org", "acc-disappear-token-project")
+	var tokenID, projectID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
+		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckProjectTokenDestroy(t),
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("uptrace_project_token.test", "id"),
+					captureAttr("uptrace_project_token.test", "id", &tokenID),
+					captureAttr("uptrace_project_token.test", "project_id", &projectID),
+				),
+			},
+			{
+				PreConfig: func() {
+					deleteProjectTokenOutOfBand(t, projectID, tokenID)
+				},
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("uptrace_project_token.test", "id"),
+					resource.TestCheckResourceAttrSet("uptrace_project_token.test", "token"),
+				),
+			},
+		},
+	})
+}
+
+func captureAttr(resourceAddr, attr string, dest *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceAddr]
+		if !ok {
+			return fmt.Errorf("resource %s not found", resourceAddr)
+		}
+		v, ok := rs.Primary.Attributes[attr]
+		if !ok {
+			return fmt.Errorf("attribute %s not found on %s", attr, resourceAddr)
+		}
+		*dest = v
+		return nil
+	}
+}
+
+func deleteProjectTokenOutOfBand(t *testing.T, projectIDStr, tokenIDStr string) {
+	t.Helper()
+	if projectIDStr == "" || tokenIDStr == "" {
+		t.Fatal("project ID or token ID was not captured before out-of-band delete")
+	}
+
+	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	if err != nil {
+		t.Fatalf("invalid project ID %q: %v", projectIDStr, err)
+	}
+	tokenID, err := strconv.ParseUint(tokenIDStr, 10, 64)
+	if err != nil {
+		t.Fatalf("invalid token ID %q: %v", tokenIDStr, err)
+	}
+
+	c := testutil.TestAccClient(t)
+	_, err = c.API.DeleteProjectToken(context.Background(), &generated.DeleteProjectTokenRequestOptions{
+		PathParams: &generated.DeleteProjectTokenPath{
+			ProjectID: projectID,
+			TokenID:   tokenID,
+		},
+	})
+	if err != nil && !client.IsNotFound(err) && !client.IsForbidden(err) {
+		t.Fatalf("delete project token %d out-of-band: %v", tokenID, err)
+	}
+}
