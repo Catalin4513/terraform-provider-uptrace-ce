@@ -175,8 +175,9 @@ func (r *ProjectTokenResource) Read(ctx context.Context, req resource.ReadReques
 }
 
 func (r *ProjectTokenResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan projectTokenModel
+	var plan, state projectTokenModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -211,6 +212,9 @@ func (r *ProjectTokenResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 
 	projectTokenToModel(&out.Token, &plan)
+
+	plan.DSN = state.DSN
+	plan.Token = state.Token
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
