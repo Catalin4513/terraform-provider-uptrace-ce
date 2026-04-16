@@ -98,3 +98,8 @@ func ParseProjectID(s string) (uint32, error) {
 func ParseTokenID(s string) (uint64, error) {
 	return strconv.ParseUint(s, 10, 64)
 }
+
+// ParseChannelID parses a string notification channel ID into an int64.
+func ParseChannelID(s string) (int64, error) {
+	return strconv.ParseInt(s, 10, 64)
+}
