@@ -89,3 +89,8 @@ func ParseOrgID(s string) (uint64, error) {
 func ParseProjectID(s string) (int64, error) {
 	return strconv.ParseInt(s, 10, 64)
 }
+
+// ParseTokenID parses a string token ID into a uint64.
+func ParseTokenID(s string) (uint64, error) {
+	return strconv.ParseUint(s, 10, 64)
+}
