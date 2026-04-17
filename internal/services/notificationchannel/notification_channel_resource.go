@@ -838,30 +838,14 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		sm.Category = optionalStringToValue(p.Category)
 		sm.Subcategory = optionalStringToValue(p.Subcategory)
-		if p.Impact != nil {
-			sm.Impact = types.StringValue(string(*p.Impact))
-		} else {
-			sm.Impact = types.StringNull()
-		}
-		if p.Urgency != nil {
-			sm.Urgency = types.StringValue(string(*p.Urgency))
-		} else {
-			sm.Urgency = types.StringNull()
-		}
-		if p.Severity != nil {
-			sm.Severity = types.StringValue(string(*p.Severity))
-		} else {
-			sm.Severity = types.StringNull()
-		}
+		sm.Impact = enumToValue(p.Impact)
+		sm.Urgency = enumToValue(p.Urgency)
+		sm.Severity = enumToValue(p.Severity)
 		sm.CallerID = optionalStringToValue(p.CallerID)
 		sm.Group = optionalStringToValue(p.Group)
 		sm.AssignedTo = optionalStringToValue(p.AssignedTo)
 		sm.OpenedBy = optionalStringToValue(p.OpenedBy)
-		if p.Notify != nil {
-			sm.Notify = types.StringValue(string(*p.Notify))
-		} else {
-			sm.Notify = types.StringNull()
-		}
+		sm.Notify = enumToValue(p.Notify)
 		sm.DueDate = optionalStringToValue(p.DueDate)
 		m.Servicenow = sm
 
@@ -905,21 +889,12 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			return diags
 		}
 		prior := m.Pushover
-		pm := &pushoverModel{
-			Token:   preserveIfEmpty(p.Token, priorString(prior, func(x *pushoverModel) types.String { return x.Token })),
-			UserKey: preserveIfEmpty(p.UserKey, priorString(prior, func(x *pushoverModel) types.String { return x.UserKey })),
+		m.Pushover = &pushoverModel{
+			Token:    preserveIfEmpty(p.Token, priorString(prior, func(x *pushoverModel) types.String { return x.Token })),
+			UserKey:  preserveIfEmpty(p.UserKey, priorString(prior, func(x *pushoverModel) types.String { return x.UserKey })),
+			Priority: intPtrToValue(p.Priority, priorInt64(prior, func(x *pushoverModel) types.Int64 { return x.Priority })),
+			Sound:    optionalStringToValue(p.Sound),
 		}
-		if p.Priority != nil {
-			pm.Priority = types.Int64Value(int64(*p.Priority))
-		} else {
-			pm.Priority = types.Int64Null()
-		}
-		if p.Sound != nil {
-			pm.Sound = types.StringValue(*p.Sound)
-		} else {
-			pm.Sound = types.StringNull()
-		}
-		m.Pushover = pm
 
 	case generated.NotificationChannelTypeWebhook:
 		p, err := oneOf.AsWebhookParams()
@@ -952,18 +927,13 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			return diags
 		}
 		prior := m.Alertmanager
-		am := &alertmanagerModel{
-			URL: types.StringValue(p.URL),
+		m.Alertmanager = &alertmanagerModel{
+			URL:        types.StringValue(p.URL),
+			AuthMethod: enumToValue(p.AuthMethod),
+			Username:   optionalStringToValue(p.Username),
+			Password:   preserveIfEmptyPtr(p.Password, priorString(prior, func(x *alertmanagerModel) types.String { return x.Password })),
+			Token:      preserveIfEmptyPtr(p.Token, priorString(prior, func(x *alertmanagerModel) types.String { return x.Token })),
 		}
-		if p.AuthMethod != nil {
-			am.AuthMethod = types.StringValue(string(*p.AuthMethod))
-		} else {
-			am.AuthMethod = types.StringNull()
-		}
-		am.Username = optionalStringToValue(p.Username)
-		am.Password = preserveIfEmptyPtr(p.Password, priorString(prior, func(x *alertmanagerModel) types.String { return x.Password }))
-		am.Token = preserveIfEmptyPtr(p.Token, priorString(prior, func(x *alertmanagerModel) types.String { return x.Token }))
-		m.Alertmanager = am
 
 	case generated.Incidentio:
 		p, err := oneOf.AsIncidentioParams()
@@ -1015,6 +985,37 @@ func priorString[T any](prior *T, get func(*T) types.String) types.String {
 		return types.StringNull()
 	}
 	return get(prior)
+}
+
+func priorInt64[T any](prior *T, get func(*T) types.Int64) types.Int64 {
+	if prior == nil {
+		return types.Int64Null()
+	}
+	return get(prior)
+}
+
+// enumToValue maps a *Enum (string-backed) API field to types.String. nil or
+// empty-string pointer collapses to Null so a plan-null value matches
+// post-apply state even when the backend echoes "" for an unset enum.
+func enumToValue[T ~string](p *T) types.String {
+	if p == nil || *p == "" {
+		return types.StringNull()
+	}
+	return types.StringValue(string(*p))
+}
+
+// intPtrToValue maps a *int API field to types.Int64. A nil or zero pointer
+// with a null prior collapses to Null (matching a plan where the user did not
+// set the field); otherwise the API value surfaces so out-of-band drift to a
+// non-zero value is still visible.
+func intPtrToValue(api *int, prior types.Int64) types.Int64 {
+	if api == nil {
+		return prior
+	}
+	if *api == 0 && prior.IsNull() {
+		return types.Int64Null()
+	}
+	return types.Int64Value(int64(*api))
 }
 
 // jsonObjectValidator ensures a string attribute parses as a JSON object
