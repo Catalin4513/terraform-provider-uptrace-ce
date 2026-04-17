@@ -370,6 +370,9 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 					"priority": schema.StringAttribute{
 						Optional:    true,
 						Description: "Opsgenie alert priority.",
+						Validators: []validator.String{
+							stringvalidator.OneOf("P1", "P2", "P3", "P4", "P5"),
+						},
 					},
 				},
 			},
@@ -776,12 +779,12 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			return diags
 		}
 		prior := m.Slack
-		authMethod := ""
+		authMethod := types.StringNull()
 		if p.AuthMethod != nil {
-			authMethod = string(*p.AuthMethod)
+			authMethod = types.StringValue(string(*p.AuthMethod))
 		}
 		m.Slack = &slackModel{
-			AuthMethod: preserveIfEmpty(authMethod, priorString(prior, func(x *slackModel) types.String { return x.AuthMethod })),
+			AuthMethod: authMethod,
 			WebhookURL: preserveIfEmptyPtr(p.WebhookURL, priorString(prior, func(x *slackModel) types.String { return x.WebhookURL })),
 			Token:      preserveIfEmptyPtr(p.Token, priorString(prior, func(x *slackModel) types.String { return x.Token })),
 			Channel:    preserveIfEmptyPtr(p.Channel, priorString(prior, func(x *slackModel) types.String { return x.Channel })),
@@ -830,7 +833,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		prior := m.Servicenow
 		sm := &servicenowModel{
 			URL:      preserveIfEmpty(p.URL, priorString(prior, func(x *servicenowModel) types.String { return x.URL })),
-			Username: types.StringValue(p.Username),
+			Username: preserveIfEmpty(p.Username, priorString(prior, func(x *servicenowModel) types.String { return x.Username })),
 			Password: preserveIfEmpty(p.Password, priorString(prior, func(x *servicenowModel) types.String { return x.Password })),
 		}
 		sm.Category = optionalStringToValue(p.Category)
@@ -948,6 +951,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			warnMalformedParams("alertmanager", err)
 			return diags
 		}
+		prior := m.Alertmanager
 		am := &alertmanagerModel{
 			URL: types.StringValue(p.URL),
 		}
@@ -957,8 +961,8 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			am.AuthMethod = types.StringNull()
 		}
 		am.Username = optionalStringToValue(p.Username)
-		am.Password = optionalStringToValue(p.Password)
-		am.Token = optionalStringToValue(p.Token)
+		am.Password = preserveIfEmptyPtr(p.Password, priorString(prior, func(x *alertmanagerModel) types.String { return x.Password }))
+		am.Token = preserveIfEmptyPtr(p.Token, priorString(prior, func(x *alertmanagerModel) types.String { return x.Token }))
 		m.Alertmanager = am
 
 	case generated.Incidentio:

@@ -222,6 +222,13 @@ func validateSlackBlock(m *slackModel, diags *diag.Diagnostics) {
 				`slack.token must be set when auth_method is "token".`,
 			)
 		}
+		if m.Channel.IsNull() && !m.Channel.IsUnknown() {
+			diags.AddAttributeError(
+				path.Root("slack").AtName("channel"),
+				"channel is required",
+				`slack.channel must be set when auth_method is "token".`,
+			)
+		}
 		forbidField(m.WebhookURL, path.Root("slack").AtName("webhook_url"), "auth_method is \"token\"", diags)
 	}
 }

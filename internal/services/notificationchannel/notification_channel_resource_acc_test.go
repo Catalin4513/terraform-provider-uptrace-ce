@@ -89,6 +89,83 @@ resource "uptrace_notification_channel" "test" {
 `, orgName, projectName, channelName, token, slackChannel)
 }
 
+func testAccNotificationChannelConfigAlertmanager(orgName, projectName, channelName, url, token string) string {
+	return fmt.Sprintf(`
+resource "uptrace_org" "test" {
+  name = %q
+}
+
+resource "uptrace_project" "test" {
+  org_id = uptrace_org.test.id
+  name   = %q
+}
+
+resource "uptrace_notification_channel" "test" {
+  project_id = uptrace_project.test.id
+  name       = %q
+  type       = "alertmanager"
+  priorities = ["high"]
+
+  alertmanager {
+    url         = %q
+    auth_method = "bearer"
+    token       = %q
+  }
+}
+`, orgName, projectName, channelName, url, token)
+}
+
+func testAccNotificationChannelConfigPagerduty(orgName, projectName, channelName, routingKey string) string {
+	return fmt.Sprintf(`
+resource "uptrace_org" "test" {
+  name = %q
+}
+
+resource "uptrace_project" "test" {
+  org_id = uptrace_org.test.id
+  name   = %q
+}
+
+resource "uptrace_notification_channel" "test" {
+  project_id = uptrace_project.test.id
+  name       = %q
+  type       = "pagerduty"
+  priorities = ["high"]
+
+  pagerduty {
+    routing_key = %q
+    severity    = "warning"
+  }
+}
+`, orgName, projectName, channelName, routingKey)
+}
+
+func testAccNotificationChannelConfigServicenow(orgName, projectName, channelName, url, username, password string) string {
+	return fmt.Sprintf(`
+resource "uptrace_org" "test" {
+  name = %q
+}
+
+resource "uptrace_project" "test" {
+  org_id = uptrace_org.test.id
+  name   = %q
+}
+
+resource "uptrace_notification_channel" "test" {
+  project_id = uptrace_project.test.id
+  name       = %q
+  type       = "servicenow"
+  priorities = ["high"]
+
+  servicenow {
+    url      = %q
+    username = %q
+    password = %q
+  }
+}
+`, orgName, projectName, channelName, url, username, password)
+}
+
 func testAccCheckNotificationChannelDestroy(t *testing.T) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		c := testutil.TestAccClient(t)
@@ -154,7 +231,7 @@ func TestAccNotificationChannel_basic(t *testing.T) {
 				ResourceName:            "uptrace_notification_channel.test",
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"webhook"},
+				ImportStateVerifyIgnore: []string{"webhook.url"},
 				ImportStateIdFunc: func(s *terraform.State) (string, error) {
 					rs, ok := s.RootModule().Resources["uptrace_notification_channel.test"]
 					if !ok {
@@ -209,7 +286,7 @@ func TestAccNotificationChannel_slackWebhook(t *testing.T) {
 				ImportStateVerify: true,
 				// Sensitive fields are not returned by the API on read, so they can't
 				// round-trip through import verification.
-				ImportStateVerifyIgnore: []string{"slack"},
+				ImportStateVerifyIgnore: []string{"slack.webhook_url"},
 				ImportStateIdFunc: func(s *terraform.State) (string, error) {
 					rs, ok := s.RootModule().Resources["uptrace_notification_channel.test"]
 					if !ok {
@@ -253,6 +330,149 @@ func TestAccNotificationChannel_slackToken(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "name", "acc-slack-token-renamed"),
 				),
+			},
+		},
+	})
+}
+
+func TestAccNotificationChannel_alertmanager(t *testing.T) {
+	const (
+		orgName     = "acc-channel-alertmanager-org"
+		projectName = "acc-channel-alertmanager-project"
+		url         = "https://alertmanager.example.com/api/v2/alerts"
+		token       = "alertmanager-token-placeholder"
+	)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
+		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckNotificationChannelDestroy(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccNotificationChannelConfigAlertmanager(orgName, projectName, "acc-alertmanager", url, token),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "type", "alertmanager"),
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "alertmanager.url", url),
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "alertmanager.auth_method", "bearer"),
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "alertmanager.token", token),
+				),
+			},
+			{
+				Config:   testAccNotificationChannelConfigAlertmanager(orgName, projectName, "acc-alertmanager", url, token),
+				PlanOnly: true,
+			},
+			{
+				Config: testAccNotificationChannelConfigAlertmanager(orgName, projectName, "acc-alertmanager-renamed", url, token),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "name", "acc-alertmanager-renamed"),
+				),
+			},
+			{
+				ResourceName:            "uptrace_notification_channel.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"alertmanager.token"},
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs, ok := s.RootModule().Resources["uptrace_notification_channel.test"]
+					if !ok {
+						return "", fmt.Errorf("uptrace_notification_channel.test not found in state")
+					}
+					return fmt.Sprintf("%s:%s", rs.Primary.Attributes["project_id"], rs.Primary.ID), nil
+				},
+			},
+		},
+	})
+}
+
+func TestAccNotificationChannel_pagerduty(t *testing.T) {
+	const (
+		orgName     = "acc-channel-pagerduty-org"
+		projectName = "acc-channel-pagerduty-project"
+		routingKey  = "pagerduty-routing-key-placeholder"
+	)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
+		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckNotificationChannelDestroy(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccNotificationChannelConfigPagerduty(orgName, projectName, "acc-pagerduty", routingKey),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "type", "pagerduty"),
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "pagerduty.routing_key", routingKey),
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "pagerduty.severity", "warning"),
+				),
+			},
+			{
+				Config:   testAccNotificationChannelConfigPagerduty(orgName, projectName, "acc-pagerduty", routingKey),
+				PlanOnly: true,
+			},
+			{
+				Config: testAccNotificationChannelConfigPagerduty(orgName, projectName, "acc-pagerduty-renamed", routingKey),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "name", "acc-pagerduty-renamed"),
+				),
+			},
+			{
+				ResourceName:            "uptrace_notification_channel.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"pagerduty.routing_key"},
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs, ok := s.RootModule().Resources["uptrace_notification_channel.test"]
+					if !ok {
+						return "", fmt.Errorf("uptrace_notification_channel.test not found in state")
+					}
+					return fmt.Sprintf("%s:%s", rs.Primary.Attributes["project_id"], rs.Primary.ID), nil
+				},
+			},
+		},
+	})
+}
+
+func TestAccNotificationChannel_servicenow(t *testing.T) {
+	const (
+		orgName     = "acc-channel-servicenow-org"
+		projectName = "acc-channel-servicenow-project"
+		url         = "https://example.service-now.com"
+		username    = "terraform-acc"
+		password    = "servicenow-password-placeholder"
+	)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
+		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckNotificationChannelDestroy(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccNotificationChannelConfigServicenow(orgName, projectName, "acc-servicenow", url, username, password),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "type", "servicenow"),
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "servicenow.url", url),
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "servicenow.username", username),
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "servicenow.password", password),
+				),
+			},
+			{
+				Config:   testAccNotificationChannelConfigServicenow(orgName, projectName, "acc-servicenow", url, username, password),
+				PlanOnly: true,
+			},
+			{
+				Config: testAccNotificationChannelConfigServicenow(orgName, projectName, "acc-servicenow-renamed", url, username, password),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "name", "acc-servicenow-renamed"),
+				),
+			},
+			{
+				ResourceName:            "uptrace_notification_channel.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"servicenow.url", "servicenow.password"},
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs, ok := s.RootModule().Resources["uptrace_notification_channel.test"]
+					if !ok {
+						return "", fmt.Errorf("uptrace_notification_channel.test not found in state")
+					}
+					return fmt.Sprintf("%s:%s", rs.Primary.Attributes["project_id"], rs.Primary.ID), nil
+				},
 			},
 		},
 	})

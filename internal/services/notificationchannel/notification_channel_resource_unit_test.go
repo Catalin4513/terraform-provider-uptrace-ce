@@ -4,6 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	rschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
@@ -26,6 +30,12 @@ func newOneOfWithTelegram(p generated.TelegramParams) *generated.NotificationCha
 func newOneOfWithWebhook(p generated.WebhookParams) *generated.NotificationChannel_Params_OneOf {
 	o := &generated.NotificationChannel_Params_OneOf{}
 	_ = o.FromWebhookParams(p)
+	return o
+}
+
+func newOneOfWithAlertmanager(p generated.AlertmanagerParams) *generated.NotificationChannel_Params_OneOf {
+	o := &generated.NotificationChannel_Params_OneOf{}
+	_ = o.FromAlertmanagerParams(p)
 	return o
 }
 
@@ -59,6 +69,35 @@ func TestChannelToModel_slackWebhook(t *testing.T) {
 	require.NotNil(t, m.Slack)
 	require.Equal(t, types.StringValue("webhook"), m.Slack.AuthMethod)
 	require.Equal(t, types.StringValue("https://hooks.slack.com/test"), m.Slack.WebhookURL)
+}
+
+func TestChannelToModel_slackDoesNotPreserveMissingAuthMethod(t *testing.T) {
+	ch := &generated.NotificationChannel{
+		ID:         101,
+		ProjectID:  7,
+		Name:       "alerts-slack",
+		Type:       generated.Slack,
+		Status:     generated.Delivering,
+		MatchAll:   runtime.Ptr(true),
+		Priorities: []generated.NotificationChannelPriorities{generated.NotificationChannelPrioritiesHigh},
+		Params: generated.NotificationChannel_Params{
+			NotificationChannel_Params_OneOf: newOneOfWithSlack(generated.SlackParams{
+				AuthMethod: nil,
+				WebhookURL: runtime.Ptr("https://hooks.slack.com/test"),
+			}),
+		},
+	}
+	m := notificationChannelModel{
+		Slack: &slackModel{
+			AuthMethod: types.StringValue("webhook"),
+		},
+	}
+
+	diags := channelToModel(context.Background(), ch, &m)
+	require.False(t, diags.HasError(), "channelToModel returned errors: %v", diags)
+
+	require.NotNil(t, m.Slack)
+	require.True(t, m.Slack.AuthMethod.IsNull())
 }
 
 func TestChannelToModel_telegram(t *testing.T) {
@@ -168,6 +207,32 @@ func TestChannelToModel_webhookEmptyPayload(t *testing.T) {
 	require.True(t, m.Webhook.Payload.IsNull())
 }
 
+func TestChannelToModel_preservesExplicitEmptyMonitorIDs(t *testing.T) {
+	emptyMonitorIDs, d := types.ListValueFrom(context.Background(), types.StringType, []types.String{})
+	require.False(t, d.HasError(), "ListValueFrom returned errors: %v", d)
+	ch := &generated.NotificationChannel{
+		ID:         303,
+		ProjectID:  7,
+		Name:       "alerts-hook",
+		Type:       generated.NotificationChannelTypeWebhook,
+		Status:     generated.Delivering,
+		MatchAll:   runtime.Ptr(true),
+		Priorities: []generated.NotificationChannelPriorities{generated.NotificationChannelPrioritiesHigh},
+		Params: generated.NotificationChannel_Params{
+			NotificationChannel_Params_OneOf: newOneOfWithWebhook(generated.WebhookParams{
+				URL: "https://example.com/hook",
+			}),
+		},
+	}
+	m := notificationChannelModel{MonitorIDs: emptyMonitorIDs}
+
+	diags := channelToModel(context.Background(), ch, &m)
+	require.False(t, diags.HasError(), "channelToModel returned errors: %v", diags)
+
+	require.False(t, m.MonitorIDs.IsNull())
+	require.Len(t, m.MonitorIDs.Elements(), 0)
+}
+
 func TestChannelToModel_doesNotSetProjectID(t *testing.T) {
 	ch := &generated.NotificationChannel{
 		ID:         100,
@@ -207,6 +272,95 @@ func TestChannelToModel_nilConditionBecomesNull(t *testing.T) {
 	require.False(t, diags.HasError(), "channelToModel returned errors: %v", diags)
 
 	require.True(t, m.Condition.IsNull())
+}
+
+func TestChannelToModel_alertmanagerPreservesRedactedSensitiveValues(t *testing.T) {
+	ch := &generated.NotificationChannel{
+		ID:         400,
+		ProjectID:  7,
+		Name:       "alerts-am",
+		Type:       generated.Alertmanager,
+		Status:     generated.Delivering,
+		Priorities: []generated.NotificationChannelPriorities{generated.NotificationChannelPrioritiesHigh},
+		Params: generated.NotificationChannel_Params{
+			NotificationChannel_Params_OneOf: newOneOfWithAlertmanager(generated.AlertmanagerParams{
+				URL:        "https://alertmanager.example.com",
+				AuthMethod: (*generated.AlertmanagerParamsAuthMethod)(runtime.Ptr("bearer")),
+				Password:   nil,
+				Token:      runtime.Ptr(""),
+			}),
+		},
+	}
+	m := notificationChannelModel{
+		Alertmanager: &alertmanagerModel{
+			Password: types.StringValue("prior-password"),
+			Token:    types.StringValue("prior-token"),
+		},
+	}
+
+	diags := channelToModel(context.Background(), ch, &m)
+	require.False(t, diags.HasError(), "channelToModel returned errors: %v", diags)
+
+	require.NotNil(t, m.Alertmanager)
+	require.Equal(t, types.StringValue("prior-password"), m.Alertmanager.Password)
+	require.Equal(t, types.StringValue("prior-token"), m.Alertmanager.Token)
+}
+
+func TestChannelToModel_servicenowPreservesRedactedUsername(t *testing.T) {
+	oneOf := &generated.NotificationChannel_Params_OneOf{}
+	require.NoError(t, oneOf.UnmarshalJSON([]byte(`{
+		"url": "https://servicenow.example.com",
+		"username": "",
+		"password": ""
+	}`)))
+	ch := &generated.NotificationChannel{
+		ID:         500,
+		ProjectID:  7,
+		Name:       "alerts-servicenow",
+		Type:       generated.Servicenow,
+		Status:     generated.Delivering,
+		Priorities: []generated.NotificationChannelPriorities{generated.NotificationChannelPrioritiesHigh},
+		Params: generated.NotificationChannel_Params{
+			NotificationChannel_Params_OneOf: oneOf,
+		},
+	}
+	m := notificationChannelModel{
+		Servicenow: &servicenowModel{
+			Username: types.StringValue("prior-user"),
+		},
+	}
+
+	diags := channelToModel(context.Background(), ch, &m)
+	require.False(t, diags.HasError(), "channelToModel returned errors: %v", diags)
+
+	require.NotNil(t, m.Servicenow)
+	require.Equal(t, types.StringValue("prior-user"), m.Servicenow.Username)
+}
+
+func TestSchema_opsgeniePriorityRejectsInvalidValues(t *testing.T) {
+	var resp resource.SchemaResponse
+	NewNotificationChannelResource().Schema(context.Background(), resource.SchemaRequest{}, &resp)
+	require.False(t, resp.Diagnostics.HasError(), "Schema returned errors: %v", resp.Diagnostics)
+
+	opsgenieBlock, ok := resp.Schema.Blocks["opsgenie"].(rschema.SingleNestedBlock)
+	require.True(t, ok, "opsgenie block should be a single nested block")
+	priorityAttr, ok := opsgenieBlock.Attributes["priority"].(rschema.StringAttribute)
+	require.True(t, ok, "opsgenie.priority should be a string attribute")
+	require.NotEmpty(t, priorityAttr.Validators, "opsgenie.priority should validate enum values")
+
+	require.False(t, validateOpsgeniePriority(priorityAttr.Validators, "P1").Diagnostics.HasError())
+	require.True(t, validateOpsgeniePriority(priorityAttr.Validators, "P0").Diagnostics.HasError())
+}
+
+func validateOpsgeniePriority(validators []validator.String, value string) validator.StringResponse {
+	resp := validator.StringResponse{}
+	for _, v := range validators {
+		v.ValidateString(context.Background(), validator.StringRequest{
+			Path:        path.Root("opsgenie").AtName("priority"),
+			ConfigValue: types.StringValue(value),
+		}, &resp)
+	}
+	return resp
 }
 
 func TestParseChannelID_valid(t *testing.T) {
