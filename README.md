@@ -145,6 +145,54 @@ Manages an Uptrace project scoped under an organization.
 
 Duration strings accept the stdlib units `ns`, `us`, `ms`, `s`, `m`, `h` plus `d` (day) and `w` (week).
 
+### uptrace_project_token
+
+Manages an ingest token for an Uptrace project.
+
+| Field      | Type   | Required | Note                                                              |
+|------------|--------|----------|-------------------------------------------------------------------|
+| project_id | string | yes      | Forces replacement on change.                                     |
+| name       | string | no       | Updatable. Removing the attribute clears the name on the server.  |
+| id         | string | computed |                                                                   |
+| token      | string | computed | Sensitive. Generated server-side; never supplied by the user.     |
+| dsn        | string | computed | Sensitive. Ingest URL with the token embedded.                    |
+
+Import with `<project_id>:<token_id>`.
+
+### uptrace_notification_channel
+
+Manages an Uptrace notification channel. Exactly one param block must be configured, and it must match `type` — the provider rejects missing or extra blocks at plan time.
+
+| Field       | Type         | Required | Note                                                                                |
+|-------------|--------------|----------|-------------------------------------------------------------------------------------|
+| project_id  | string       | yes      | Forces replacement on change.                                                        |
+| name        | string       | yes      | Updatable.                                                                           |
+| type        | string       | yes      | Forces replacement. One of: `slack`, `google_chat`, `mattermost`, `pagerduty`, `servicenow`, `opsgenie`, `telegram`, `teams`, `pushover`, `webhook`, `alertmanager`, `incidentio`. |
+| priorities  | list(string) | yes      | Alert priorities to match. Each value one of `info`, `low`, `medium`, `high`.        |
+| match_all   | bool         | no       | Defaults to `true`. When `false`, `monitor_ids` must be set and non-empty.           |
+| monitor_ids | list(string) | no       | Required when `match_all = false`.                                                   |
+| condition   | string       | no       | Alert condition expression.                                                          |
+| id          | string       | computed |                                                                                      |
+| status      | string       | computed | One of `delivering`, `paused`, `disabled`, `draft`.                                  |
+
+Type-specific params go in a single nested block named for the `type`:
+
+| Block          | Fields                                                                                                               |
+|----------------|----------------------------------------------------------------------------------------------------------------------|
+| `slack`        | `auth_method` (`webhook` or `token`), `webhook_url`, `token`, `channel`. Fields required depend on `auth_method`.    |
+| `google_chat`  | `webhook_url`                                                                                                        |
+| `mattermost`   | `webhook_url`                                                                                                        |
+| `pagerduty`    | `routing_key`, `severity` (`critical`, `error`, `warning`, `info`)                                                   |
+| `servicenow`   | `url`, `username`, `password`, plus optional `category`, `subcategory`, `impact`, `urgency`, `severity`, `caller_id`, `group`, `assigned_to`, `opened_by`, `notify`, `due_date` |
+| `opsgenie`     | `api_key`, `priority`                                                                                                |
+| `telegram`     | `chat_id` (int64)                                                                                                    |
+| `teams`        | `webhook_url`                                                                                                        |
+| `pushover`     | `token`, `user_key`, optional `priority` (int, -2 to 2), `sound`                                                     |
+| `webhook`      | `url`                                                                                                                |
+| `alertmanager` | `url`, optional `auth_method` (`none`, `basic_auth`, `bearer`), `username`, `password`, `token`. Credential fields required depend on `auth_method`. |
+| `incidentio`   | `url`, `api_key`                                                                                                     |
+
+
 
 ## Files not in git
 

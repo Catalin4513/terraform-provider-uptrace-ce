@@ -24,9 +24,10 @@ import (
 )
 
 var (
-	_ resource.Resource                = &NotificationChannelResource{}
-	_ resource.ResourceWithConfigure   = &NotificationChannelResource{}
-	_ resource.ResourceWithImportState = &NotificationChannelResource{}
+	_ resource.Resource                   = &NotificationChannelResource{}
+	_ resource.ResourceWithConfigure      = &NotificationChannelResource{}
+	_ resource.ResourceWithImportState    = &NotificationChannelResource{}
+	_ resource.ResourceWithValidateConfig = &NotificationChannelResource{}
 )
 
 type NotificationChannelResource struct {
@@ -248,7 +249,7 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 				Description: "Google Chat params.",
 				Attributes: map[string]schema.Attribute{
 					"webhook_url": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 						Description: "Google Chat webhook URL.",
 					},
@@ -258,7 +259,7 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 				Description: "Mattermost params.",
 				Attributes: map[string]schema.Attribute{
 					"webhook_url": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 						Description: "Mattermost webhook URL.",
 					},
@@ -268,12 +269,12 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 				Description: "PagerDuty params.",
 				Attributes: map[string]schema.Attribute{
 					"routing_key": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 						Description: "PagerDuty routing key.",
 					},
 					"severity": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Description: fmt.Sprintf("PagerDuty severity. Valid values: %s.", strings.Join(pagerdutySeverities, ", ")),
 						Validators: []validator.String{
 							stringvalidator.OneOf(pagerdutySeverities...),
@@ -285,16 +286,16 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 				Description: "ServiceNow params.",
 				Attributes: map[string]schema.Attribute{
 					"url": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 						Description: "ServiceNow instance URL.",
 					},
 					"username": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Description: "ServiceNow username.",
 					},
 					"password": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 						Description: "ServiceNow password.",
 					},
@@ -360,12 +361,12 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 				Description: "Opsgenie params.",
 				Attributes: map[string]schema.Attribute{
 					"api_key": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 						Description: "Opsgenie API key.",
 					},
 					"priority": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Description: "Opsgenie alert priority.",
 					},
 				},
@@ -374,7 +375,7 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 				Description: "Telegram params.",
 				Attributes: map[string]schema.Attribute{
 					"chat_id": schema.Int64Attribute{
-						Required:    true,
+						Optional:    true,
 						Description: "Telegram chat ID.",
 					},
 				},
@@ -383,7 +384,7 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 				Description: "Microsoft Teams params.",
 				Attributes: map[string]schema.Attribute{
 					"webhook_url": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 						Description: "Teams webhook URL.",
 					},
@@ -393,12 +394,12 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 				Description: "Pushover params.",
 				Attributes: map[string]schema.Attribute{
 					"token": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 						Description: "Pushover application token.",
 					},
 					"user_key": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 						Description: "Pushover user key.",
 					},
@@ -416,7 +417,7 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 				Description: "Webhook params.",
 				Attributes: map[string]schema.Attribute{
 					"url": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 						Description: "Webhook URL.",
 					},
@@ -426,7 +427,7 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 				Description: "Alertmanager params.",
 				Attributes: map[string]schema.Attribute{
 					"url": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Description: "Alertmanager API endpoint URL.",
 					},
 					"auth_method": schema.StringAttribute{
@@ -456,11 +457,11 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 				Description: "incident.io params.",
 				Attributes: map[string]schema.Attribute{
 					"url": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Description: "Alert Events V2 endpoint URL.",
 					},
 					"api_key": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 						Description: "incident.io API key.",
 					},
