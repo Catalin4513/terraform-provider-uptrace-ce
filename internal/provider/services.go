@@ -4,6 +4,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/services/notificationchannel"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/services/org"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/services/project"
 )
@@ -17,6 +18,7 @@ type ServiceRegistration interface {
 }
 
 var services = []ServiceRegistration{
+	notificationchannel.Registration{},
 	org.Registration{},
 	project.Registration{},
 }

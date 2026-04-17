@@ -1,11 +1,14 @@
 package testutil
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/provider"
@@ -27,6 +30,24 @@ func PreCheck(t *testing.T) {
 	}
 	if os.Getenv("UPTRACE_TOKEN") == "" {
 		t.Fatal("UPTRACE_TOKEN must be set for acceptance tests")
+	}
+}
+
+// CaptureAttr returns a TestCheckFunc that copies an attribute value from a
+// resource's primary state into dest. Use it to thread an attribute between
+// acceptance-test steps (e.g. to delete the resource out-of-band by ID).
+func CaptureAttr(resourceAddr, attr string, dest *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceAddr]
+		if !ok {
+			return fmt.Errorf("resource %s not found", resourceAddr)
+		}
+		v, ok := rs.Primary.Attributes[attr]
+		if !ok {
+			return fmt.Errorf("attribute %s not found on %s", attr, resourceAddr)
+		}
+		*dest = v
+		return nil
 	}
 }
 
