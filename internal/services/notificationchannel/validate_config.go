@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 func (r *NotificationChannelResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
@@ -85,9 +86,9 @@ func validateSelectedBlock(cfg *notificationChannelModel, typeName string, diags
 	case "slack":
 		validateSlackBlock(cfg.Slack, diags)
 	case "google_chat":
-		validateRequiredString(cfg.GoogleChat, "google_chat", "webhook_url", func(m *googleChatModel) any { return m.WebhookURL }, diags)
+		validateRequiredString(cfg.GoogleChat, "google_chat", "webhook_url", func(m *googleChatModel) types.String { return m.WebhookURL }, diags)
 	case "mattermost":
-		validateRequiredString(cfg.Mattermost, "mattermost", "webhook_url", func(m *mattermostModel) any { return m.WebhookURL }, diags)
+		validateRequiredString(cfg.Mattermost, "mattermost", "webhook_url", func(m *mattermostModel) types.String { return m.WebhookURL }, diags)
 	case "pagerduty":
 		validatePagerdutyBlock(cfg.Pagerduty, diags)
 	case "servicenow":
@@ -97,11 +98,11 @@ func validateSelectedBlock(cfg *notificationChannelModel, typeName string, diags
 	case "telegram":
 		validateTelegramBlock(cfg.Telegram, diags)
 	case "teams":
-		validateRequiredString(cfg.Teams, "teams", "webhook_url", func(m *teamsModel) any { return m.WebhookURL }, diags)
+		validateRequiredString(cfg.Teams, "teams", "webhook_url", func(m *teamsModel) types.String { return m.WebhookURL }, diags)
 	case "pushover":
 		validatePushoverBlock(cfg.Pushover, diags)
 	case "webhook":
-		validateRequiredString(cfg.Webhook, "webhook", "url", func(m *webhookModel) any { return m.URL }, diags)
+		validateRequiredString(cfg.Webhook, "webhook", "url", func(m *webhookModel) types.String { return m.URL }, diags)
 	case "alertmanager":
 		validateAlertmanagerBlock(cfg.Alertmanager, diags)
 	case "incidentio":
@@ -246,28 +247,9 @@ func validatePagerdutyBlock(m *pagerdutyModel, diags *diag.Diagnostics) {
 }
 
 func validateServicenowBlock(m *servicenowModel, diags *diag.Diagnostics) {
-	if m == nil {
-		return
-	}
-	for _, f := range []struct {
-		val interface {
-			IsNull() bool
-			IsUnknown() bool
-		}
-		name string
-	}{
-		{m.URL, "url"},
-		{m.Username, "username"},
-		{m.Password, "password"},
-	} {
-		if f.val.IsNull() && !f.val.IsUnknown() {
-			diags.AddAttributeError(
-				path.Root("servicenow").AtName(f.name),
-				f.name+" is required",
-				"servicenow."+f.name+" must be set.",
-			)
-		}
-	}
+	validateRequiredString(m, "servicenow", "url", func(x *servicenowModel) types.String { return x.URL }, diags)
+	validateRequiredString(m, "servicenow", "username", func(x *servicenowModel) types.String { return x.Username }, diags)
+	validateRequiredString(m, "servicenow", "password", func(x *servicenowModel) types.String { return x.Password }, diags)
 }
 
 func validateOpsgenieBlock(m *opsgenieModel, diags *diag.Diagnostics) {
@@ -399,7 +381,7 @@ type nullable interface {
 }
 
 func forbidField(v nullable, p path.Path, reason string, diags *diag.Diagnostics) {
-	if !v.IsNull() {
+	if !v.IsNull() && !v.IsUnknown() {
 		diags.AddAttributeError(
 			p,
 			"unexpected attribute",
@@ -408,14 +390,11 @@ func forbidField(v nullable, p path.Path, reason string, diags *diag.Diagnostics
 	}
 }
 
-func validateRequiredString[T any](m *T, blockName, fieldName string, getter func(*T) any, diags *diag.Diagnostics) {
+func validateRequiredString[T any](m *T, blockName, fieldName string, getter func(*T) types.String, diags *diag.Diagnostics) {
 	if m == nil {
 		return
 	}
-	v, ok := getter(m).(nullable)
-	if !ok {
-		return
-	}
+	v := getter(m)
 	if v.IsNull() && !v.IsUnknown() {
 		diags.AddAttributeError(
 			path.Root(blockName).AtName(fieldName),

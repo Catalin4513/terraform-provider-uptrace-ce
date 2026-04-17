@@ -716,8 +716,10 @@ func channelToModel(ctx context.Context, ch *generated.NotificationChannel, m *n
 		diags.Append(d...)
 	}
 
-	// MonitorIDs.
-	if len(ch.MonitorIds) > 0 {
+	// MonitorIDs. Preserve an explicit empty list from prior state so a user
+	// writing `monitor_ids = []` round-trips instead of flipping to null.
+	switch {
+	case len(ch.MonitorIds) > 0:
 		vals := make([]types.String, len(ch.MonitorIds))
 		for i, id := range ch.MonitorIds {
 			vals[i] = types.StringValue(strconv.FormatInt(id, 10))
@@ -725,7 +727,9 @@ func channelToModel(ctx context.Context, ch *generated.NotificationChannel, m *n
 		var d diag.Diagnostics
 		m.MonitorIDs, d = types.ListValueFrom(ctx, types.StringType, vals)
 		diags.Append(d...)
-	} else {
+	case !m.MonitorIDs.IsNull() && !m.MonitorIDs.IsUnknown() && len(m.MonitorIDs.Elements()) == 0:
+		// Prior was an explicit empty list; keep it.
+	default:
 		m.MonitorIDs = types.ListNull(types.StringType)
 	}
 
@@ -752,6 +756,9 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		)
 	}
 
+	// Fields marked Sensitive in the schema route through preserveIfEmpty so a
+	// redacted or empty API response falls back to the prior state value; other
+	// fields overwrite directly so genuine out-of-band drift is visible.
 	switch ch.Type {
 	case generated.Slack:
 		p, err := oneOf.AsSlackParams()
@@ -788,8 +795,9 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			warnMalformedParams("google_chat", err)
 			return diags
 		}
+		prior := m.GoogleChat
 		m.GoogleChat = &googleChatModel{
-			WebhookURL: types.StringValue(p.WebhookURL),
+			WebhookURL: preserveIfEmpty(p.WebhookURL, priorString(prior, func(x *googleChatModel) types.String { return x.WebhookURL })),
 		}
 
 	case generated.Mattermost:
@@ -798,8 +806,9 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			warnMalformedParams("mattermost", err)
 			return diags
 		}
+		prior := m.Mattermost
 		m.Mattermost = &mattermostModel{
-			WebhookURL: types.StringValue(p.WebhookURL),
+			WebhookURL: preserveIfEmpty(p.WebhookURL, priorString(prior, func(x *mattermostModel) types.String { return x.WebhookURL })),
 		}
 
 	case generated.Pagerduty:
@@ -808,8 +817,9 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			warnMalformedParams("pagerduty", err)
 			return diags
 		}
+		prior := m.Pagerduty
 		m.Pagerduty = &pagerdutyModel{
-			RoutingKey: types.StringValue(p.RoutingKey),
+			RoutingKey: preserveIfEmpty(p.RoutingKey, priorString(prior, func(x *pagerdutyModel) types.String { return x.RoutingKey })),
 			Severity:   types.StringValue(string(p.Severity)),
 		}
 
@@ -819,10 +829,11 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			warnMalformedParams("servicenow", err)
 			return diags
 		}
+		prior := m.Servicenow
 		sm := &servicenowModel{
-			URL:      types.StringValue(p.URL),
+			URL:      preserveIfEmpty(p.URL, priorString(prior, func(x *servicenowModel) types.String { return x.URL })),
 			Username: types.StringValue(p.Username),
-			Password: types.StringValue(p.Password),
+			Password: preserveIfEmpty(p.Password, priorString(prior, func(x *servicenowModel) types.String { return x.Password })),
 		}
 		sm.Category = optionalStringToValue(p.Category)
 		sm.Subcategory = optionalStringToValue(p.Subcategory)
@@ -859,8 +870,9 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			warnMalformedParams("opsgenie", err)
 			return diags
 		}
+		prior := m.Opsgenie
 		m.Opsgenie = &opsgenieModel{
-			APIKey:   types.StringValue(p.APIKey),
+			APIKey:   preserveIfEmpty(p.APIKey, priorString(prior, func(x *opsgenieModel) types.String { return x.APIKey })),
 			Priority: types.StringValue(string(p.Priority)),
 		}
 
@@ -880,8 +892,9 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			warnMalformedParams("teams", err)
 			return diags
 		}
+		prior := m.Teams
 		m.Teams = &teamsModel{
-			WebhookURL: types.StringValue(p.WebhookURL),
+			WebhookURL: preserveIfEmpty(p.WebhookURL, priorString(prior, func(x *teamsModel) types.String { return x.WebhookURL })),
 		}
 
 	case generated.Pushover:
@@ -890,9 +903,10 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			warnMalformedParams("pushover", err)
 			return diags
 		}
+		prior := m.Pushover
 		pm := &pushoverModel{
-			Token:   types.StringValue(p.Token),
-			UserKey: types.StringValue(p.UserKey),
+			Token:   preserveIfEmpty(p.Token, priorString(prior, func(x *pushoverModel) types.String { return x.Token })),
+			UserKey: preserveIfEmpty(p.UserKey, priorString(prior, func(x *pushoverModel) types.String { return x.UserKey })),
 		}
 		if p.Priority != nil {
 			pm.Priority = types.Int64Value(int64(*p.Priority))
@@ -912,8 +926,9 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			warnMalformedParams("webhook", err)
 			return diags
 		}
+		prior := m.Webhook
 		m.Webhook = &webhookModel{
-			URL: types.StringValue(p.URL),
+			URL: preserveIfEmpty(p.URL, priorString(prior, func(x *webhookModel) types.String { return x.URL })),
 		}
 
 	case generated.Alertmanager:
@@ -941,9 +956,10 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			warnMalformedParams("incidentio", err)
 			return diags
 		}
+		prior := m.Incidentio
 		m.Incidentio = &incidentioModel{
 			URL:    types.StringValue(p.URL),
-			APIKey: types.StringValue(p.APIKey),
+			APIKey: preserveIfEmpty(p.APIKey, priorString(prior, func(x *incidentioModel) types.String { return x.APIKey })),
 		}
 
 	default:
@@ -960,4 +976,18 @@ func optionalStringToValue(s *string) types.String {
 		return types.StringValue(*s)
 	}
 	return types.StringNull()
+}
+
+func preserveIfEmpty(api string, prior types.String) types.String {
+	if api == "" {
+		return prior
+	}
+	return types.StringValue(api)
+}
+
+func priorString[T any](prior *T, get func(*T) types.String) types.String {
+	if prior == nil {
+		return types.StringNull()
+	}
+	return get(prior)
 }

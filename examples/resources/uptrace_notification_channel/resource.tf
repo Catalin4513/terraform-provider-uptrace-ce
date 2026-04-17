@@ -15,6 +15,7 @@ resource "uptrace_notification_channel" "slack" {
   match_all  = true
 
   slack {
+    auth_method = "webhook"
     webhook_url = "https://hooks.slack.com/services/T00/B00/XXXX"
   }
 }
