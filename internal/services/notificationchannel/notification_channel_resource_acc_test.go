@@ -14,6 +14,30 @@ import (
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/testutil"
 )
 
+func testAccNotificationChannelConfigBasic(orgName, projectName, channelName, webhookURL string) string {
+	return fmt.Sprintf(`
+resource "uptrace_org" "test" {
+  name = %q
+}
+
+resource "uptrace_project" "test" {
+  org_id = uptrace_org.test.id
+  name   = %q
+}
+
+resource "uptrace_notification_channel" "test" {
+  project_id = uptrace_project.test.id
+  name       = %q
+  type       = "webhook"
+  priorities = ["high"]
+
+  webhook {
+    url = %q
+  }
+}
+`, orgName, projectName, channelName, webhookURL)
+}
+
 func testAccNotificationChannelConfigSlackWebhook(orgName, projectName, channelName, webhookURL string) string {
 	return fmt.Sprintf(`
 resource "uptrace_org" "test" {
@@ -65,30 +89,6 @@ resource "uptrace_notification_channel" "test" {
 `, orgName, projectName, channelName, token, slackChannel)
 }
 
-func testAccNotificationChannelConfigWebhook(orgName, projectName, channelName, webhookURL string) string {
-	return fmt.Sprintf(`
-resource "uptrace_org" "test" {
-  name = %q
-}
-
-resource "uptrace_project" "test" {
-  org_id = uptrace_org.test.id
-  name   = %q
-}
-
-resource "uptrace_notification_channel" "test" {
-  project_id = uptrace_project.test.id
-  name       = %q
-  type       = "webhook"
-  priorities = ["high"]
-
-  webhook {
-    url = %q
-  }
-}
-`, orgName, projectName, channelName, webhookURL)
-}
-
 func testAccCheckNotificationChannelDestroy(t *testing.T) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		c := testutil.TestAccClient(t)
@@ -119,6 +119,52 @@ func testAccCheckNotificationChannelDestroy(t *testing.T) resource.TestCheckFunc
 		}
 		return nil
 	}
+}
+
+func TestAccNotificationChannel_basic(t *testing.T) {
+	const (
+		orgName     = "acc-channel-basic-org"
+		projectName = "acc-channel-basic-project"
+		webhookURL  = "https://example.com/hooks/alert"
+	)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
+		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckNotificationChannelDestroy(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccNotificationChannelConfigBasic(orgName, projectName, "acc-basic", webhookURL),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("uptrace_notification_channel.test", "id"),
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "type", "webhook"),
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "webhook.url", webhookURL),
+				),
+			},
+			{
+				Config:   testAccNotificationChannelConfigBasic(orgName, projectName, "acc-basic", webhookURL),
+				PlanOnly: true,
+			},
+			{
+				Config: testAccNotificationChannelConfigBasic(orgName, projectName, "acc-basic-renamed", webhookURL),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "name", "acc-basic-renamed"),
+				),
+			},
+			{
+				ResourceName:            "uptrace_notification_channel.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"webhook"},
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs, ok := s.RootModule().Resources["uptrace_notification_channel.test"]
+					if !ok {
+						return "", fmt.Errorf("uptrace_notification_channel.test not found in state")
+					}
+					return fmt.Sprintf("%s:%s", rs.Primary.Attributes["project_id"], rs.Primary.ID), nil
+				},
+			},
+		},
+	})
 }
 
 func TestAccNotificationChannel_slackWebhook(t *testing.T) {
@@ -202,45 +248,11 @@ func TestAccNotificationChannel_slackToken(t *testing.T) {
 				Config:   testAccNotificationChannelConfigSlackToken(orgName, projectName, "acc-slack-token", token, slackChannel),
 				PlanOnly: true,
 			},
-		},
-	})
-}
-
-func TestAccNotificationChannel_webhook(t *testing.T) {
-	const (
-		orgName     = "acc-channel-webhook-org"
-		projectName = "acc-channel-webhook-project"
-		webhookURL  = "https://example.com/hooks/alert"
-	)
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testutil.PreCheck(t) },
-		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
-		CheckDestroy:             testAccCheckNotificationChannelDestroy(t),
-		Steps: []resource.TestStep{
 			{
-				Config: testAccNotificationChannelConfigWebhook(orgName, projectName, "acc-webhook", webhookURL),
+				Config: testAccNotificationChannelConfigSlackToken(orgName, projectName, "acc-slack-token-renamed", token, slackChannel),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("uptrace_notification_channel.test", "id"),
-					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "type", "webhook"),
-					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "webhook.url", webhookURL),
+					resource.TestCheckResourceAttr("uptrace_notification_channel.test", "name", "acc-slack-token-renamed"),
 				),
-			},
-			{
-				Config:   testAccNotificationChannelConfigWebhook(orgName, projectName, "acc-webhook", webhookURL),
-				PlanOnly: true,
-			},
-			{
-				ResourceName:            "uptrace_notification_channel.test",
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"webhook"},
-				ImportStateIdFunc: func(s *terraform.State) (string, error) {
-					rs, ok := s.RootModule().Resources["uptrace_notification_channel.test"]
-					if !ok {
-						return "", fmt.Errorf("uptrace_notification_channel.test not found in state")
-					}
-					return fmt.Sprintf("%s:%s", rs.Primary.Attributes["project_id"], rs.Primary.ID), nil
-				},
 			},
 		},
 	})
@@ -252,7 +264,7 @@ func TestAccNotificationChannel_disappearsOutOfBand(t *testing.T) {
 		projectName = "acc-disappear-channel-project"
 		webhookURL  = "https://example.com/hooks/disappearing"
 	)
-	config := testAccNotificationChannelConfigWebhook(orgName, projectName, "acc-disappear-channel", webhookURL)
+	config := testAccNotificationChannelConfigBasic(orgName, projectName, "acc-disappear-channel", webhookURL)
 	var channelID, projectID string
 
 	resource.Test(t, resource.TestCase{
@@ -264,8 +276,8 @@ func TestAccNotificationChannel_disappearsOutOfBand(t *testing.T) {
 				Config: config,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("uptrace_notification_channel.test", "id"),
-					captureNotificationChannelAttr("uptrace_notification_channel.test", "id", &channelID),
-					captureNotificationChannelAttr("uptrace_notification_channel.test", "project_id", &projectID),
+					testutil.CaptureAttr("uptrace_notification_channel.test", "id", &channelID),
+					testutil.CaptureAttr("uptrace_notification_channel.test", "project_id", &projectID),
 				),
 			},
 			{
@@ -280,21 +292,6 @@ func TestAccNotificationChannel_disappearsOutOfBand(t *testing.T) {
 			},
 		},
 	})
-}
-
-func captureNotificationChannelAttr(resourceAddr, attr string, dest *string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceAddr]
-		if !ok {
-			return fmt.Errorf("resource %s not found", resourceAddr)
-		}
-		v, ok := rs.Primary.Attributes[attr]
-		if !ok {
-			return fmt.Errorf("attribute %s not found on %s", attr, resourceAddr)
-		}
-		*dest = v
-		return nil
-	}
 }
 
 func deleteNotificationChannelOutOfBand(t *testing.T, projectIDStr, channelIDStr string) {

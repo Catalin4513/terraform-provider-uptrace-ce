@@ -165,8 +165,8 @@ func TestAccProjectToken_disappearsOutOfBand(t *testing.T) {
 				Config: config,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("uptrace_project_token.test", "id"),
-					captureAttr("uptrace_project_token.test", "id", &tokenID),
-					captureAttr("uptrace_project_token.test", "project_id", &projectID),
+					testutil.CaptureAttr("uptrace_project_token.test", "id", &tokenID),
+					testutil.CaptureAttr("uptrace_project_token.test", "project_id", &projectID),
 				),
 			},
 			{
@@ -183,20 +183,6 @@ func TestAccProjectToken_disappearsOutOfBand(t *testing.T) {
 	})
 }
 
-func captureAttr(resourceAddr, attr string, dest *string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceAddr]
-		if !ok {
-			return fmt.Errorf("resource %s not found", resourceAddr)
-		}
-		v, ok := rs.Primary.Attributes[attr]
-		if !ok {
-			return fmt.Errorf("attribute %s not found on %s", attr, resourceAddr)
-		}
-		*dest = v
-		return nil
-	}
-}
 
 func deleteProjectTokenOutOfBand(t *testing.T, projectIDStr, tokenIDStr string) {
 	t.Helper()

@@ -766,28 +766,17 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			warnMalformedParams("slack", err)
 			return diags
 		}
-		sm := &slackModel{}
+		prior := m.Slack
+		authMethod := ""
 		if p.AuthMethod != nil {
-			sm.AuthMethod = types.StringValue(string(*p.AuthMethod))
-		} else {
-			sm.AuthMethod = types.StringNull()
+			authMethod = string(*p.AuthMethod)
 		}
-		if p.WebhookURL != nil {
-			sm.WebhookURL = types.StringValue(*p.WebhookURL)
-		} else {
-			sm.WebhookURL = types.StringNull()
+		m.Slack = &slackModel{
+			AuthMethod: preserveIfEmpty(authMethod, priorString(prior, func(x *slackModel) types.String { return x.AuthMethod })),
+			WebhookURL: preserveIfEmptyPtr(p.WebhookURL, priorString(prior, func(x *slackModel) types.String { return x.WebhookURL })),
+			Token:      preserveIfEmptyPtr(p.Token, priorString(prior, func(x *slackModel) types.String { return x.Token })),
+			Channel:    preserveIfEmptyPtr(p.Channel, priorString(prior, func(x *slackModel) types.String { return x.Channel })),
 		}
-		if p.Token != nil {
-			sm.Token = types.StringValue(*p.Token)
-		} else {
-			sm.Token = types.StringNull()
-		}
-		if p.Channel != nil {
-			sm.Channel = types.StringValue(*p.Channel)
-		} else {
-			sm.Channel = types.StringNull()
-		}
-		m.Slack = sm
 
 	case generated.GoogleChat:
 		p, err := oneOf.AsGoogleChatParams()
@@ -983,6 +972,16 @@ func preserveIfEmpty(api string, prior types.String) types.String {
 		return prior
 	}
 	return types.StringValue(api)
+}
+
+// preserveIfEmptyPtr is preserveIfEmpty for *string-shaped API fields, where
+// the backend distinguishes nil-pointer from pointer-to-empty but neither
+// should clobber the prior state value.
+func preserveIfEmptyPtr(api *string, prior types.String) types.String {
+	if api == nil || *api == "" {
+		return prior
+	}
+	return types.StringValue(*api)
 }
 
 func priorString[T any](prior *T, get func(*T) types.String) types.String {
