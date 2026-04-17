@@ -116,6 +116,58 @@ func TestChannelToModel_webhook(t *testing.T) {
 	require.False(t, m.MonitorIDs.IsNull())
 }
 
+func TestChannelToModel_webhookWithPayload(t *testing.T) {
+	ch := &generated.NotificationChannel{
+		ID:         301,
+		ProjectID:  7,
+		Name:       "alerts-hook",
+		Type:       generated.NotificationChannelTypeWebhook,
+		Status:     generated.Delivering,
+		MatchAll:   runtime.Ptr(true),
+		Priorities: []generated.NotificationChannelPriorities{generated.NotificationChannelPrioritiesHigh},
+		Params: generated.NotificationChannel_Params{
+			NotificationChannel_Params_OneOf: newOneOfWithWebhook(generated.WebhookParams{
+				URL: "https://example.com/hook",
+				Payload: map[string]any{
+					"alert":    "uptrace",
+					"severity": "high",
+				},
+			}),
+		},
+	}
+	var m notificationChannelModel
+
+	diags := channelToModel(context.Background(), ch, &m)
+	require.False(t, diags.HasError(), "channelToModel returned errors: %v", diags)
+	require.NotNil(t, m.Webhook)
+	require.False(t, m.Webhook.Payload.IsNull())
+	// json.Marshal of map[string]any sorts keys, so the output is stable.
+	require.Equal(t, `{"alert":"uptrace","severity":"high"}`, m.Webhook.Payload.ValueString())
+}
+
+func TestChannelToModel_webhookEmptyPayload(t *testing.T) {
+	ch := &generated.NotificationChannel{
+		ID:         302,
+		ProjectID:  7,
+		Name:       "alerts-hook",
+		Type:       generated.NotificationChannelTypeWebhook,
+		Status:     generated.Delivering,
+		MatchAll:   runtime.Ptr(true),
+		Priorities: []generated.NotificationChannelPriorities{generated.NotificationChannelPrioritiesHigh},
+		Params: generated.NotificationChannel_Params{
+			NotificationChannel_Params_OneOf: newOneOfWithWebhook(generated.WebhookParams{
+				URL: "https://example.com/hook",
+			}),
+		},
+	}
+	var m notificationChannelModel
+
+	diags := channelToModel(context.Background(), ch, &m)
+	require.False(t, diags.HasError(), "channelToModel returned errors: %v", diags)
+	require.NotNil(t, m.Webhook)
+	require.True(t, m.Webhook.Payload.IsNull())
+}
+
 func TestChannelToModel_doesNotSetProjectID(t *testing.T) {
 	ch := &generated.NotificationChannel{
 		ID:         100,

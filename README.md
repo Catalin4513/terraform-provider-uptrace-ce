@@ -188,7 +188,7 @@ Type-specific params go in a single nested block named for the `type`:
 | `telegram`     | `chat_id` (int64)                                                                                                    |
 | `teams`        | `webhook_url`                                                                                                        |
 | `pushover`     | `token`, `user_key`, optional `priority` (int, -2 to 2), `sound`                                                     |
-| `webhook`      | `url`                                                                                                                |
+| `webhook`      | `url`, optional `payload` (JSON object string — use `jsonencode()`)                                                  |
 | `alertmanager` | `url`, optional `auth_method` (`none`, `basic_auth`, `bearer`), `username`, `password`, `token`. Credential fields required depend on `auth_method`. |
 | `incidentio`   | `url`, `api_key`                                                                                                     |
 

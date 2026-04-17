@@ -2,6 +2,7 @@ package notificationchannel
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -227,9 +228,18 @@ func buildRequestBody(ctx context.Context, m *notificationChannelModel) (*genera
 			diags.AddError("missing webhook block", "webhook block is required when type is webhook")
 			return nil, diags
 		}
-		if err := oneOf.FromWebhookParams(generated.WebhookParams{
+		params := generated.WebhookParams{
 			URL: m.Webhook.URL.ValueString(),
-		}); err != nil {
+		}
+		if !m.Webhook.Payload.IsNull() && !m.Webhook.Payload.IsUnknown() {
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(m.Webhook.Payload.ValueString()), &payload); err != nil {
+				diags.AddError("invalid webhook payload", err.Error())
+				return nil, diags
+			}
+			params.Payload = payload
+		}
+		if err := oneOf.FromWebhookParams(params); err != nil {
 			diags.AddError("failed to set webhook params", err.Error())
 			return nil, diags
 		}

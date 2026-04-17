@@ -31,3 +31,18 @@ resource "uptrace_notification_channel" "telegram" {
     chat_id = -100123456
   }
 }
+
+resource "uptrace_notification_channel" "webhook" {
+  project_id = uptrace_project.example.id
+  name       = "alerts-webhook"
+  type       = "webhook"
+  priorities = ["high"]
+
+  webhook {
+    url = "https://example.com/alerts"
+    payload = jsonencode({
+      source   = "uptrace"
+      severity = "high"
+    })
+  }
+}

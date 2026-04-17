@@ -2,6 +2,7 @@ package notificationchannel
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -122,7 +123,8 @@ type pushoverModel struct {
 }
 
 type webhookModel struct {
-	URL types.String `tfsdk:"url"`
+	URL     types.String `tfsdk:"url"`
+	Payload types.String `tfsdk:"payload"`
 }
 
 type alertmanagerModel struct {
@@ -420,6 +422,13 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 						Optional:    true,
 						Sensitive:   true,
 						Description: "Webhook URL.",
+					},
+					"payload": schema.StringAttribute{
+						Optional:    true,
+						Description: "Optional JSON object sent as the webhook payload. Use jsonencode() to construct.",
+						Validators: []validator.String{
+							jsonObjectValidator{},
+						},
 					},
 				},
 			},
@@ -916,9 +925,22 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			return diags
 		}
 		prior := m.Webhook
-		m.Webhook = &webhookModel{
-			URL: preserveIfEmpty(p.URL, priorString(prior, func(x *webhookModel) types.String { return x.URL })),
+		wm := &webhookModel{
+			URL:     preserveIfEmpty(p.URL, priorString(prior, func(x *webhookModel) types.String { return x.URL })),
+			Payload: types.StringNull(),
 		}
+		if len(p.Payload) > 0 {
+			buf, err := json.Marshal(p.Payload)
+			if err != nil {
+				diags.AddWarning(
+					"failed to encode webhook payload",
+					fmt.Sprintf("could not marshal webhook payload to JSON: %s", err.Error()),
+				)
+			} else {
+				wm.Payload = types.StringValue(string(buf))
+			}
+		}
+		m.Webhook = wm
 
 	case generated.Alertmanager:
 		p, err := oneOf.AsAlertmanagerParams()
@@ -989,4 +1011,34 @@ func priorString[T any](prior *T, get func(*T) types.String) types.String {
 		return types.StringNull()
 	}
 	return get(prior)
+}
+
+// jsonObjectValidator ensures a string attribute parses as a JSON object
+// (not a scalar, array, or malformed JSON).
+type jsonObjectValidator struct{}
+
+func (jsonObjectValidator) Description(context.Context) string {
+	return "must be a JSON object (e.g. constructed with jsonencode())"
+}
+
+func (jsonObjectValidator) MarkdownDescription(context.Context) string {
+	return "must be a JSON object (e.g. constructed with `jsonencode()`)"
+}
+
+func (jsonObjectValidator) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	var v any
+	if err := json.Unmarshal([]byte(req.ConfigValue.ValueString()), &v); err != nil {
+		resp.Diagnostics.AddAttributeError(req.Path, "invalid JSON", err.Error())
+		return
+	}
+	if _, ok := v.(map[string]any); !ok {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"payload must be a JSON object",
+			fmt.Sprintf("got %T; use a JSON object at the top level (e.g. jsonencode({ key = \"value\" }))", v),
+		)
+	}
 }

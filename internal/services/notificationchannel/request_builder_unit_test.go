@@ -101,6 +101,52 @@ func TestBuildRequestBody_webhook(t *testing.T) {
 	require.Equal(t, "https://example.com/hook", p.URL)
 }
 
+func TestBuildRequestBody_webhookWithPayload(t *testing.T) {
+	priorities, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"high"})
+	m := &notificationChannelModel{
+		Name:       types.StringValue("alerts-hook"),
+		Type:       types.StringValue("webhook"),
+		MatchAll:   types.BoolValue(true),
+		Condition:  types.StringNull(),
+		Priorities: priorities,
+		MonitorIDs: types.ListNull(types.StringType),
+		Webhook: &webhookModel{
+			URL:     types.StringValue("https://example.com/hook"),
+			Payload: types.StringValue(`{"alert":"uptrace","severity":"high","tags":["prod","api"]}`),
+		},
+	}
+
+	body, diags := buildRequestBody(context.Background(), m)
+	require.False(t, diags.HasError(), "unexpected errors: %v", diags)
+
+	p, err := body.Params.NotificationChannelRequest_Params_OneOf.AsWebhookParams()
+	require.NoError(t, err)
+	require.Equal(t, "uptrace", p.Payload["alert"])
+	require.Equal(t, "high", p.Payload["severity"])
+	require.ElementsMatch(t, []any{"prod", "api"}, p.Payload["tags"])
+}
+
+func TestBuildRequestBody_webhookInvalidPayload(t *testing.T) {
+	priorities, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"high"})
+	m := &notificationChannelModel{
+		Name:       types.StringValue("alerts-hook"),
+		Type:       types.StringValue("webhook"),
+		MatchAll:   types.BoolValue(true),
+		Condition:  types.StringNull(),
+		Priorities: priorities,
+		MonitorIDs: types.ListNull(types.StringType),
+		Webhook: &webhookModel{
+			URL:     types.StringValue("https://example.com/hook"),
+			Payload: types.StringValue(`{not valid json`),
+		},
+	}
+
+	body, diags := buildRequestBody(context.Background(), m)
+	require.True(t, diags.HasError())
+	require.Nil(t, body)
+	require.Contains(t, diags.Errors()[0].Summary(), "invalid webhook payload")
+}
+
 func TestBuildRequestBody_withMonitorIDs(t *testing.T) {
 	priorities, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"high"})
 	monitorIDs, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"10", "20", "30"})
