@@ -3,18 +3,23 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
 
 const (
-	defaultRequestTimeout = 10 * time.Second
+	defaultRequestTimeout = 30 * time.Second
 	maxRetries            = 2
 	retryWaitMax          = 5 * time.Second
 )
@@ -102,4 +107,64 @@ func ParseTokenID(s string) (uint64, error) {
 // ParseChannelID parses a string notification channel ID into an int64.
 func ParseChannelID(s string) (int64, error) {
 	return strconv.ParseInt(s, 10, 64)
+}
+
+// ParseMonitorID parses a string monitor ID into an int64.
+func ParseMonitorID(s string) (int64, error) {
+	return strconv.ParseInt(s, 10, 64)
+}
+
+// ImportStateCompoundID parses a ":"-separated compound import ID and writes
+// each segment to a matching state attribute. The last field is mapped to
+// "id" (Terraform primary-key convention); earlier fields are written to
+// attributes whose name equals the field name.
+func ImportStateCompoundID(
+	ctx context.Context,
+	req resource.ImportStateRequest,
+	resp *resource.ImportStateResponse,
+	fields ...string,
+) {
+	parts := strings.Split(req.ID, ":")
+	if len(parts) != len(fields) {
+		resp.Diagnostics.AddError(
+			"invalid import ID",
+			fmt.Sprintf("expected format <%s>, got %q", strings.Join(fields, ">:<"), req.ID),
+		)
+		return
+	}
+	for i, name := range fields {
+		if parts[i] == "" {
+			resp.Diagnostics.AddError(
+				"invalid import ID",
+				fmt.Sprintf("%s segment must not be empty", name),
+			)
+			return
+		}
+	}
+	for i, name := range fields {
+		attr := name
+		if i == len(fields)-1 {
+			attr = "id"
+		}
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root(attr), parts[i])...)
+	}
+}
+
+// ResourceFromProviderData unwraps the provider data passed to a Resource's
+// Configure method. Returns nil during pre-configure (ProviderData is still
+// nil) without emitting diagnostics; emits a diagnostic error and returns nil
+// for an unexpected type.
+func ResourceFromProviderData(providerData any, diags *diag.Diagnostics) *Client {
+	if providerData == nil {
+		return nil
+	}
+	c, ok := providerData.(*Client)
+	if !ok {
+		diags.AddError(
+			"unexpected provider data type",
+			fmt.Sprintf("expected *client.Client, got %T", providerData),
+		)
+		return nil
+	}
+	return c
 }

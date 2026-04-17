@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
 
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
 
@@ -75,12 +76,12 @@ func TestProjectTokenToModel_emptyNameTreatedAsNull(t *testing.T) {
 }
 
 func TestParseTokenID_valid(t *testing.T) {
-	id, err := parseTokenID("123")
+	id, err := client.ParseTokenID("123")
 	require.NoError(t, err)
 	require.Equal(t, uint64(123), id)
 }
 
 func TestParseTokenID_invalid(t *testing.T) {
-	_, err := parseTokenID("abc")
+	_, err := client.ParseTokenID("abc")
 	require.Error(t, err)
 }

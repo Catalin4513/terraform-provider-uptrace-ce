@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
@@ -136,18 +134,7 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 }
 
 func (r *ProjectResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-
-	c, ok := req.ProviderData.(*client.Client)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"unexpected provider data type",
-			fmt.Sprintf("expected *client.Client, got %T", req.ProviderData))
-		return
-	}
-	r.client = c
+	r.client = client.ResourceFromProviderData(req.ProviderData, &resp.Diagnostics)
 }
 
 func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -157,7 +144,7 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	orgID, err := parseOrgID(plan.OrgID.ValueString())
+	orgID, err := client.ParseOrgID(plan.OrgID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid org_id", err.Error())
 		return
@@ -195,7 +182,7 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	projectID, err := parseProjectID(state.ID.ValueString())
+	projectID, err := client.ParseProjectID(state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project ID", err.Error())
 		return
@@ -234,7 +221,7 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	projectID, err := parseProjectID(plan.ID.ValueString())
+	projectID, err := client.ParseProjectID(plan.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project ID", err.Error())
 		return
@@ -271,7 +258,7 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	projectID, err := parseProjectID(state.ID.ValueString())
+	projectID, err := client.ParseProjectID(state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project ID", err.Error())
 		return
@@ -290,24 +277,7 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 // ImportState accepts "<orgID>:<projectID>" so org_id is populated even when
 // the API response omits orgId.
 func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	parts := strings.Split(req.ID, ":")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		resp.Diagnostics.AddError(
-			"invalid import ID",
-			fmt.Sprintf("expected format <org_id>:<project_id>, got %q", req.ID),
-		)
-		return
-	}
-	if _, err := parseOrgID(parts[0]); err != nil {
-		resp.Diagnostics.AddError("invalid org_id in import ID", err.Error())
-		return
-	}
-	if _, err := parseProjectID(parts[1]); err != nil {
-		resp.Diagnostics.AddError("invalid project_id in import ID", err.Error())
-		return
-	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("org_id"), parts[0])...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
+	client.ImportStateCompoundID(ctx, req, resp, "org_id", "project_id")
 }
 
 func projectRequestBody(m *projectModel) (*generated.ProjectCreateRequest, error) {
@@ -444,12 +414,4 @@ func boolFromPtr(v *bool) types.Bool {
 		return types.BoolNull()
 	}
 	return types.BoolValue(*v)
-}
-
-func parseProjectID(s string) (uint32, error) {
-	return client.ParseProjectID(s)
-}
-
-func parseOrgID(s string) (uint64, error) {
-	return client.ParseOrgID(s)
 }

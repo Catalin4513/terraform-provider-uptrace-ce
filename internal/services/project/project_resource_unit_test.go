@@ -8,6 +8,7 @@ import (
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
 	str2duration "github.com/xhit/go-str2duration/v2"
 
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
 
@@ -130,12 +131,12 @@ func TestProjectRequestBody_semconvEnumIsPassedThrough(t *testing.T) {
 }
 
 func TestParseProjectID_valid(t *testing.T) {
-	id, err := parseProjectID("123")
+	id, err := client.ParseProjectID("123")
 	require.NoError(t, err)
 	require.Equal(t, uint32(123), id)
 }
 
 func TestParseProjectID_invalid(t *testing.T) {
-	_, err := parseProjectID("abc")
+	_, err := client.ParseProjectID("abc")
 	require.Error(t, err)
 }

@@ -192,6 +192,24 @@ Type-specific params go in a single nested block named for the `type`:
 | `alertmanager` | `url`, optional `auth_method` (`none`, `basic_auth`, `bearer`), `username`, `password`, `token`. Credential fields required depend on `auth_method`. |
 | `incidentio`   | `url`, `api_key`                                                                                                     |
 
+### uptrace_error_monitor
+
+Manages an Uptrace error monitor. Error monitors watch trend-anomalies in a metric-driven MQL query and fire alerts through attached notification channels and/or team email.
+
+| Field                     | Type              | Required | Note                                                                                                |
+|---------------------------|-------------------|----------|-----------------------------------------------------------------------------------------------------|
+| project_id                | string            | yes      | Forces replacement on change.                                                                       |
+| name                      | string            | yes      | Updatable.                                                                                          |
+| notify_everyone_by_email  | bool              | no       | Defaults to `false`. Updatable.                                                                     |
+| trend_agg_func            | string            | no       | Defaults to `sum`. One of `sum`, `avg`, `median`, `last`.                                           |
+| trend_sensitivity         | string            | no       | Defaults to `medium`. One of `low`, `medium`, `high`.                                               |
+| team_ids                  | list(string)      | no       | Team IDs to notify when the monitor fires.                                                          |
+| channel_ids               | list(string)      | no       | Notification channel IDs (`uptrace_notification_channel.id`). No `tonumber()` wrapper needed.       |
+| params.query              | string            | yes      | MQL query expression. The backend normalizes MQL; the provider preserves the user's input form.     |
+| params.metrics            | list of objects   | yes      | At least one metric. Each: `{ name = "...", alias = "$..." }`. Aliases must start with `$`.         |
+| id                        | string            | computed |                                                                                                     |
+| status                    | string            | computed | One of `active`, `paused`, `firing`, `no_data`, `disabled`.                                         |
+
 
 
 ## Files not in git

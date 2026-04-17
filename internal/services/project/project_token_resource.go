@@ -2,11 +2,8 @@ package project
 
 import (
 	"context"
-	"fmt"
 	"strconv"
-	"strings"
 
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -86,18 +83,7 @@ func (r *ProjectTokenResource) Schema(_ context.Context, _ resource.SchemaReques
 }
 
 func (r *ProjectTokenResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-
-	c, ok := req.ProviderData.(*client.Client)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"unexpected provider data type",
-			fmt.Sprintf("expected *client.Client, got %T", req.ProviderData))
-		return
-	}
-	r.client = c
+	r.client = client.ResourceFromProviderData(req.ProviderData, &resp.Diagnostics)
 }
 
 func (r *ProjectTokenResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -107,7 +93,7 @@ func (r *ProjectTokenResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	projectID, err := parseProjectID(plan.ProjectID.ValueString())
+	projectID, err := client.ParseProjectID(plan.ProjectID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project_id", err.Error())
 		return
@@ -143,13 +129,13 @@ func (r *ProjectTokenResource) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 
-	projectID, err := parseProjectID(state.ProjectID.ValueString())
+	projectID, err := client.ParseProjectID(state.ProjectID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project_id", err.Error())
 		return
 	}
 
-	tokenID, err := parseTokenID(state.ID.ValueString())
+	tokenID, err := client.ParseTokenID(state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid token ID", err.Error())
 		return
@@ -182,13 +168,13 @@ func (r *ProjectTokenResource) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 
-	projectID, err := parseProjectID(plan.ProjectID.ValueString())
+	projectID, err := client.ParseProjectID(plan.ProjectID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project_id", err.Error())
 		return
 	}
 
-	tokenID, err := parseTokenID(plan.ID.ValueString())
+	tokenID, err := client.ParseTokenID(plan.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid token ID", err.Error())
 		return
@@ -225,13 +211,13 @@ func (r *ProjectTokenResource) Delete(ctx context.Context, req resource.DeleteRe
 		return
 	}
 
-	projectID, err := parseProjectID(state.ProjectID.ValueString())
+	projectID, err := client.ParseProjectID(state.ProjectID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project_id", err.Error())
 		return
 	}
 
-	tokenID, err := parseTokenID(state.ID.ValueString())
+	tokenID, err := client.ParseTokenID(state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid token ID", err.Error())
 		return
@@ -252,24 +238,7 @@ func (r *ProjectTokenResource) Delete(ctx context.Context, req resource.DeleteRe
 
 // ImportState accepts "<project_id>:<token_id>".
 func (r *ProjectTokenResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	parts := strings.Split(req.ID, ":")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		resp.Diagnostics.AddError(
-			"invalid import ID",
-			fmt.Sprintf("expected format <project_id>:<token_id>, got %q", req.ID),
-		)
-		return
-	}
-	if _, err := parseProjectID(parts[0]); err != nil {
-		resp.Diagnostics.AddError("invalid project_id in import ID", err.Error())
-		return
-	}
-	if _, err := parseTokenID(parts[1]); err != nil {
-		resp.Diagnostics.AddError("invalid token_id in import ID", err.Error())
-		return
-	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), parts[0])...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
+	client.ImportStateCompoundID(ctx, req, resp, "project_id", "token_id")
 }
 
 func projectTokenToModel(t *generated.ProjectToken, m *projectTokenModel) {
@@ -287,8 +256,4 @@ func projectTokenToModel(t *generated.ProjectToken, m *projectTokenModel) {
 	} else {
 		m.DSN = types.StringNull()
 	}
-}
-
-func parseTokenID(s string) (uint64, error) {
-	return client.ParseTokenID(s)
 }
