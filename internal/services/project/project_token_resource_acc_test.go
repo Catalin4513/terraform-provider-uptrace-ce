@@ -183,7 +183,6 @@ func TestAccProjectToken_disappearsOutOfBand(t *testing.T) {
 	})
 }
 
-
 func deleteProjectTokenOutOfBand(t *testing.T, projectIDStr, tokenIDStr string) {
 	t.Helper()
 	if projectIDStr == "" || tokenIDStr == "" {
