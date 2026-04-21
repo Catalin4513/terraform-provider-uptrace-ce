@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -58,8 +57,8 @@ type errorMonitorModel struct {
 	NotifyEveryoneByEmail types.Bool               `tfsdk:"notify_everyone_by_email"`
 	TrendAggFunc          types.String             `tfsdk:"trend_agg_func"`
 	TrendSensitivity      types.String             `tfsdk:"trend_sensitivity"`
-	TeamIDs               types.List               `tfsdk:"team_ids"`
-	ChannelIDs            types.List               `tfsdk:"channel_ids"`
+	TeamIDs               types.Set                `tfsdk:"team_ids"`
+	ChannelIDs            types.Set                `tfsdk:"channel_ids"`
 	Status                types.String             `tfsdk:"status"`
 	Params                *errorMonitorParamsModel `tfsdk:"params"`
 }
@@ -124,12 +123,12 @@ func (r *ErrorMonitorResource) Schema(_ context.Context, _ resource.SchemaReques
 					stringvalidator.OneOf(trendSensitivities...),
 				},
 			},
-			"team_ids": schema.ListAttribute{
+			"team_ids": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "Team IDs to notify when the monitor fires. Removing this attribute clears the association server-side.",
 			},
-			"channel_ids": schema.ListAttribute{
+			"channel_ids": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "Notification channel IDs (uptrace_notification_channel.id). Removing this attribute clears the association server-side.",
@@ -383,14 +382,14 @@ func buildErrorMonitorRequest(ctx context.Context, m *errorMonitorModel) (*gener
 		req.TrendSensitivity = &v
 	}
 
-	teamIDs, d := sliceFromIntList(ctx, path.Root("team_ids"), m.TeamIDs)
+	teamIDs, d := sliceFromIntSet(ctx, path.Root("team_ids"), m.TeamIDs)
 	diags.Append(d...)
 	if d.HasError() {
 		return nil, diags
 	}
 	req.TeamIds = teamIDs
 
-	channelIDs, d := sliceFromIntList(ctx, path.Root("channel_ids"), m.ChannelIDs)
+	channelIDs, d := sliceFromIntSet(ctx, path.Root("channel_ids"), m.ChannelIDs)
 	diags.Append(d...)
 	if d.HasError() {
 		return nil, diags
@@ -417,6 +416,17 @@ func buildErrorMonitorRequest(ctx context.Context, m *errorMonitorModel) (*gener
 func monitorToErrorModel(ctx context.Context, mon *generated.Monitor, dst *errorMonitorModel) diag.Diagnostics {
 	var diags diag.Diagnostics
 
+	if mon.Type != generated.MonitorTypeError {
+		diags.AddError(
+			"monitor type mismatch",
+			fmt.Sprintf(
+				"uptrace_error_monitor expects a monitor of type %q, but monitor id=%d is type %q",
+				generated.MonitorTypeError, mon.ID, mon.Type,
+			),
+		)
+		return diags
+	}
+
 	dst.ID = types.StringValue(strconv.FormatInt(mon.ID, 10))
 	dst.Name = types.StringValue(mon.Name)
 	dst.Status = types.StringValue(string(mon.Status))
@@ -430,8 +440,8 @@ func monitorToErrorModel(ctx context.Context, mon *generated.Monitor, dst *error
 	dst.TrendAggFunc = client.EnumToValueOrDefault(mon.TrendAggFunc, trendAggFuncDefault)
 	dst.TrendSensitivity = client.EnumToValueOrDefault(mon.TrendSensitivity, trendSensitivityDefault)
 
-	dst.TeamIDs = intListFromSlice(mon.TeamIds, dst.TeamIDs)
-	dst.ChannelIDs = intListFromSlice(mon.ChannelIds, dst.ChannelIDs)
+	dst.TeamIDs = intSetFromSlice(mon.TeamIds, dst.TeamIDs)
+	dst.ChannelIDs = intSetFromSlice(mon.ChannelIds, dst.ChannelIDs)
 
 	params, err := decodeErrorMonitorParams(mon.Params)
 	if err != nil {
@@ -479,53 +489,50 @@ func decodeErrorMonitorParams(raw map[string]any) (*generated.ErrorMonitorParams
 	return &out, nil
 }
 
-// intListFromSlice maps a []int API response to a sorted types.List of
-// stringified IDs. An explicit empty prior list round-trips as empty;
-// otherwise empty API → ListNull.
+// intSetFromSlice maps a []int API response to a types.Set of stringified
+// IDs. An explicit empty prior set round-trips as empty; otherwise empty
+// API → SetNull.
 //
-// IDs are strings on the TF side so list values can reference string-typed
+// IDs are strings on the TF side so set values can reference string-typed
 // resource IDs directly (e.g. uptrace_notification_channel.x.id) without a
-// tonumber() wrapper.
-func intListFromSlice(xs []int, prior types.List) types.List {
+// tonumber() wrapper. Sets are used (not lists) because recipient IDs have
+// no meaningful order and a list would churn on every plan.
+func intSetFromSlice(xs []int, prior types.Set) types.Set {
 	if len(xs) == 0 {
 		if !prior.IsNull() && !prior.IsUnknown() && len(prior.Elements()) == 0 {
 			return prior
 		}
-		return types.ListNull(types.StringType)
+		return types.SetNull(types.StringType)
 	}
-	sorted := make([]int, len(xs))
-	copy(sorted, xs)
-	sort.Ints(sorted)
-
-	vals := make([]attr.Value, len(sorted))
-	for i, x := range sorted {
+	vals := make([]attr.Value, len(xs))
+	for i, x := range xs {
 		vals[i] = types.StringValue(strconv.Itoa(x))
 	}
-	l, _ := types.ListValue(types.StringType, vals)
-	return l
+	s, _ := types.SetValue(types.StringType, vals)
+	return s
 }
 
-// sliceFromIntList decodes a types.List of string-encoded IDs into []int.
+// sliceFromIntSet decodes a types.Set of string-encoded IDs into []int.
 // A non-decimal element emits an attribute diagnostic.
-func sliceFromIntList(ctx context.Context, attrPath path.Path, l types.List) ([]int, diag.Diagnostics) {
+func sliceFromIntSet(ctx context.Context, attrPath path.Path, s types.Set) ([]int, diag.Diagnostics) {
 	var diags diag.Diagnostics
-	if l.IsNull() || l.IsUnknown() {
+	if s.IsNull() || s.IsUnknown() {
 		return nil, diags
 	}
 	var vals []types.String
-	diags.Append(l.ElementsAs(ctx, &vals, false)...)
+	diags.Append(s.ElementsAs(ctx, &vals, false)...)
 	if diags.HasError() {
 		return nil, diags
 	}
 	out := make([]int, 0, len(vals))
-	for i, v := range vals {
-		s := v.ValueString()
-		n, err := strconv.Atoi(s)
+	for _, v := range vals {
+		str := v.ValueString()
+		n, err := strconv.Atoi(str)
 		if err != nil {
 			diags.AddAttributeError(
-				attrPath.AtListIndex(i),
+				attrPath,
 				"invalid ID",
-				fmt.Sprintf("expected a decimal integer, got %q: %s", s, err.Error()),
+				fmt.Sprintf("expected a decimal integer, got %q: %s", str, err.Error()),
 			)
 			return nil, diags
 		}

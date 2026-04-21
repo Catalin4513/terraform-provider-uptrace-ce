@@ -19,8 +19,8 @@ func TestBuildErrorMonitorRequest_minimal(t *testing.T) {
 		NotifyEveryoneByEmail: types.BoolValue(false),
 		TrendAggFunc:          types.StringValue("sum"),
 		TrendSensitivity:      types.StringValue("medium"),
-		TeamIDs:               types.ListNull(types.StringType),
-		ChannelIDs:            types.ListNull(types.StringType),
+		TeamIDs:               types.SetNull(types.StringType),
+		ChannelIDs:            types.SetNull(types.StringType),
 		Params: &errorMonitorParamsModel{
 			Query: types.StringValue("sum($logs) | where true"),
 			Metrics: []monitorMetricModel{
@@ -47,8 +47,8 @@ func TestBuildErrorMonitorRequest_minimal(t *testing.T) {
 }
 
 func TestBuildErrorMonitorRequest_withIDs(t *testing.T) {
-	teamIDs, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"5", "3"})
-	channelIDs, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"11"})
+	teamIDs, _ := types.SetValueFrom(context.Background(), types.StringType, []string{"5", "3"})
+	channelIDs, _ := types.SetValueFrom(context.Background(), types.StringType, []string{"11"})
 	m := &errorMonitorModel{
 		Name:       types.StringValue("with-ids"),
 		TeamIDs:    teamIDs,
@@ -63,7 +63,7 @@ func TestBuildErrorMonitorRequest_withIDs(t *testing.T) {
 
 	req, diags := buildErrorMonitorRequest(context.Background(), m)
 	require.False(t, diags.HasError(), "unexpected errors: %v", diags)
-	require.Equal(t, []int{5, 3}, req.TeamIds)
+	require.ElementsMatch(t, []int{5, 3}, req.TeamIds)
 	require.Equal(t, []int{11}, req.ChannelIds)
 	require.Nil(t, req.Params.Metrics[0].Alias)
 }
@@ -127,7 +127,7 @@ func TestMonitorToErrorModel_takesAPIQueryWhenPriorNull(t *testing.T) {
 	require.Equal(t, "sum($logs)", dst.Params.Query.ValueString())
 }
 
-func TestMonitorToErrorModel_idListsSorted(t *testing.T) {
+func TestMonitorToErrorModel_idsMapToSet(t *testing.T) {
 	mon := &generated.Monitor{
 		ID:         77,
 		Name:       "err",
@@ -147,11 +147,11 @@ func TestMonitorToErrorModel_idListsSorted(t *testing.T) {
 	require.False(t, dst.TeamIDs.IsNull())
 	var team []string
 	dst.TeamIDs.ElementsAs(context.Background(), &team, false)
-	require.Equal(t, []string{"1", "5", "9"}, team)
+	require.ElementsMatch(t, []string{"1", "5", "9"}, team)
 
 	var ch []string
 	dst.ChannelIDs.ElementsAs(context.Background(), &ch, false)
-	require.Equal(t, []string{"2", "3"}, ch)
+	require.ElementsMatch(t, []string{"2", "3"}, ch)
 }
 
 func TestMonitorToErrorModel_emptyIDListsCollapseToNull(t *testing.T) {
@@ -166,8 +166,8 @@ func TestMonitorToErrorModel_emptyIDListsCollapseToNull(t *testing.T) {
 		},
 	}
 	dst := &errorMonitorModel{
-		TeamIDs:    types.ListNull(types.StringType),
-		ChannelIDs: types.ListNull(types.StringType),
+		TeamIDs:    types.SetNull(types.StringType),
+		ChannelIDs: types.SetNull(types.StringType),
 	}
 
 	diags := monitorToErrorModel(context.Background(), mon, dst)
@@ -176,22 +176,39 @@ func TestMonitorToErrorModel_emptyIDListsCollapseToNull(t *testing.T) {
 	require.True(t, dst.ChannelIDs.IsNull())
 }
 
-func TestIntListFromSlice_preservesExplicitEmpty(t *testing.T) {
-	priorEmpty, _ := types.ListValueFrom(context.Background(), types.StringType, []string{})
-	got := intListFromSlice(nil, priorEmpty)
-	require.False(t, got.IsNull(), "explicit prior empty list must round-trip")
+func TestMonitorToErrorModel_rejectsMetricType(t *testing.T) {
+	mon := &generated.Monitor{
+		ID:     77,
+		Name:   "not-an-error",
+		Type:   generated.MonitorTypeMetric,
+		Status: generated.Active,
+		Params: map[string]any{
+			"query":   "sum($spans)",
+			"metrics": []any{map[string]any{"name": "uptrace_tracing_spans", "alias": "$spans"}},
+		},
+	}
+	dst := &errorMonitorModel{}
+
+	diags := monitorToErrorModel(context.Background(), mon, dst)
+	require.True(t, diags.HasError(), "expected error for metric monitor imported into uptrace_error_monitor")
+}
+
+func TestIntSetFromSlice_preservesExplicitEmpty(t *testing.T) {
+	priorEmpty, _ := types.SetValueFrom(context.Background(), types.StringType, []string{})
+	got := intSetFromSlice(nil, priorEmpty)
+	require.False(t, got.IsNull(), "explicit prior empty set must round-trip")
 	require.Equal(t, 0, len(got.Elements()))
 }
 
-func TestSliceFromIntList_nullReturnsNil(t *testing.T) {
-	out, diags := sliceFromIntList(context.Background(), path.Root("team_ids"), types.ListNull(types.StringType))
+func TestSliceFromIntSet_nullReturnsNil(t *testing.T) {
+	out, diags := sliceFromIntSet(context.Background(), path.Root("team_ids"), types.SetNull(types.StringType))
 	require.False(t, diags.HasError())
 	require.Nil(t, out)
 }
 
-func TestSliceFromIntList_invalidElement(t *testing.T) {
-	bad, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"12", "not-a-number"})
-	_, diags := sliceFromIntList(context.Background(), path.Root("team_ids"), bad)
+func TestSliceFromIntSet_invalidElement(t *testing.T) {
+	bad, _ := types.SetValueFrom(context.Background(), types.StringType, []string{"12", "not-a-number"})
+	_, diags := sliceFromIntSet(context.Background(), path.Root("team_ids"), bad)
 	require.True(t, diags.HasError())
 }
 

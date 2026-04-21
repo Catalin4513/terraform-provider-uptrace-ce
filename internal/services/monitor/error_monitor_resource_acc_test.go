@@ -186,8 +186,8 @@ func TestAccErrorMonitor_channelIDsClearOnRemove(t *testing.T) {
 					"[uptrace_notification_channel.test.id]"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("uptrace_error_monitor.test", "channel_ids.#", "1"),
-					resource.TestCheckResourceAttrPair(
-						"uptrace_error_monitor.test", "channel_ids.0",
+					resource.TestCheckTypeSetElemAttrPair(
+						"uptrace_error_monitor.test", "channel_ids.*",
 						"uptrace_notification_channel.test", "id",
 					),
 				),
