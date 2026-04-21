@@ -20,7 +20,7 @@ func FromProviderData[T any](providerData any, diags *diag.Diagnostics) *T {
 	if !ok {
 		diags.AddError(
 			"unexpected provider data type",
-			fmt.Sprintf("expected *%T, got %T", new(T), providerData),
+			fmt.Sprintf("expected %T, got %T", new(T), providerData),
 		)
 		return nil
 	}
