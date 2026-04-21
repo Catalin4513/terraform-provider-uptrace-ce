@@ -14,7 +14,8 @@ func (Registration) Name() string {
 
 func (Registration) Resources() []func() resource.Resource {
 	return []func() resource.Resource{
-		NewMonitorResource,
+		NewErrorMonitorResource,
+		NewMetricMonitorResource,
 	}
 }
 

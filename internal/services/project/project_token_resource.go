@@ -13,6 +13,7 @@ import (
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/tfutil"
 )
 
 var (
@@ -83,7 +84,7 @@ func (r *ProjectTokenResource) Schema(_ context.Context, _ resource.SchemaReques
 }
 
 func (r *ProjectTokenResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	r.client = client.ResourceFromProviderData(req.ProviderData, &resp.Diagnostics)
+	r.client = tfutil.FromProviderData[client.Client](req.ProviderData, &resp.Diagnostics)
 }
 
 func (r *ProjectTokenResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -135,7 +136,7 @@ func (r *ProjectTokenResource) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 
-	tokenID, err := client.ParseTokenID(state.ID.ValueString())
+	tokenID, err := strconv.ParseUint(state.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid token ID", err.Error())
 		return
@@ -174,7 +175,7 @@ func (r *ProjectTokenResource) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 
-	tokenID, err := client.ParseTokenID(plan.ID.ValueString())
+	tokenID, err := strconv.ParseUint(plan.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid token ID", err.Error())
 		return
@@ -217,7 +218,7 @@ func (r *ProjectTokenResource) Delete(ctx context.Context, req resource.DeleteRe
 		return
 	}
 
-	tokenID, err := client.ParseTokenID(state.ID.ValueString())
+	tokenID, err := strconv.ParseUint(state.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid token ID", err.Error())
 		return
@@ -238,7 +239,7 @@ func (r *ProjectTokenResource) Delete(ctx context.Context, req resource.DeleteRe
 
 // ImportState accepts "<project_id>:<token_id>".
 func (r *ProjectTokenResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	client.ImportStateCompoundID(ctx, req, resp, "project_id", "token_id")
+	tfutil.ImportStateCompoundID(ctx, req, resp, "project_id", "token_id")
 }
 
 func projectTokenToModel(t *generated.ProjectToken, m *projectTokenModel) {

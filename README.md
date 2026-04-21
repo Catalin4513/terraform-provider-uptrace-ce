@@ -192,17 +192,16 @@ Type-specific params go in a single nested block named for the `type`:
 | `alertmanager` | `url`, optional `auth_method` (`none`, `basic_auth`, `bearer`), `username`, `password`, `token`. Credential fields required depend on `auth_method`. |
 | `incidentio`   | `url`, `api_key`                                                                                                     |
 
-### uptrace_monitor
+### uptrace_error_monitor / uptrace_metric_monitor
 
-Manages an Uptrace monitor. Set `type` to `error` or `metric` and configure the matching params block.
+Error and metric monitors are exposed as two separate resources that share the same set of top-level fields. Each takes a single `params` block whose shape differs per resource.
 
-Shared fields (both types):
+Shared fields (both resources):
 
 | Field                     | Type              | Required | Note                                                                                                |
 |---------------------------|-------------------|----------|-----------------------------------------------------------------------------------------------------|
 | project_id                | string            | yes      | Forces replacement on change.                                                                       |
 | name                      | string            | yes      | Updatable.                                                                                          |
-| type                      | string            | yes      | One of `error`, `metric`. Forces replacement on change.                                             |
 | notify_everyone_by_email  | bool              | no       | Defaults to `false`. Updatable.                                                                     |
 | trend_agg_func            | string            | no       | Defaults to `sum`. One of `sum`, `avg`, `median`, `last`.                                           |
 | trend_sensitivity         | string            | no       | Defaults to `medium`. One of `low`, `medium`, `high`.                                               |
@@ -211,21 +210,27 @@ Shared fields (both types):
 | id                        | string            | computed |                                                                                                     |
 | status                    | string            | computed | One of `active`, `paused`, `firing`, `no_data`, `disabled`.                                         |
 
-Exactly one of `params_error` / `params_metric` must be set, matching `type`.
+#### uptrace_error_monitor
 
-`params_error` (required when `type = "error"`):
+Watches trend anomalies in an MQL query and fires alerts through attached notification channels and/or team email.
+
+`params`:
 
 | Field                     | Type              | Required | Note                                                                                                |
 |---------------------------|-------------------|----------|-----------------------------------------------------------------------------------------------------|
-| query                     | string            | yes      | MQL query expression. The backend normalizes MQL; the provider preserves the user's input form.     |
 | metrics                   | list of objects   | yes      | At least one metric. Each: `{ name = "...", alias = "$..." }`. Aliases must start with `$`.         |
+| query                     | string            | yes      | MQL query expression. The backend normalizes MQL; the provider preserves the user's input form.     |
 
-`params_metric` (required when `type = "metric"`):
+#### uptrace_metric_monitor
+
+Evaluates an MQL query on a schedule with a manual threshold or automatic trend-based detector.
+
+`params`:
 
 | Field           | Type            | Required | Note                                                                                               |
 |-----------------|-----------------|----------|----------------------------------------------------------------------------------------------------|
-| query           | string          | yes      | MQL query expression.                                                                              |
 | metrics         | list of objects | yes      | At least one metric. Each: `{ name = "...", alias = "$..." }`.                                     |
+| query           | string          | yes      | MQL query expression.                                                                              |
 | column          | object          | no       | `{ name = "...", unit = "milliseconds" }`. The result column the detector evaluates.               |
 | resolution      | number          | no       | Evaluation resolution in milliseconds.                                                             |
 | num_eval_points | number          | no       | Number of consecutive evaluation points that must breach the threshold.                            |
@@ -233,7 +238,7 @@ Exactly one of `params_error` / `params_metric` must be set, matching `type`.
 | time_offset     | number          | no       | Time offset in milliseconds applied to the query before evaluation.                                |
 | detector        | object          | yes      | Exactly one of `manual {}` or `auto {}`.                                                           |
 
-`params_metric.detector.manual`:
+`params.detector.manual`:
 
 | Field      | Type   | Required | Note                                                                 |
 |------------|--------|----------|----------------------------------------------------------------------|
@@ -241,7 +246,7 @@ Exactly one of `params_error` / `params_metric` must be set, matching `type`.
 | max_value  | number | no       | Alert when value rises above this threshold.                         |
 | recovery   | object | no       | Hysteresis `{ min_value, max_value }` used to clear an active alert. |
 
-`params_metric.detector.auto`:
+`params.detector.auto`:
 
 | Field            | Type   | Required | Note                                               |
 |------------------|--------|----------|----------------------------------------------------|
@@ -250,7 +255,7 @@ Exactly one of `params_error` / `params_metric` must be set, matching `type`.
 | min_dev_fraction | number | no       | Minimum deviation as a fraction of the baseline.   |
 | min_dev_absolute | number | no       | Minimum absolute deviation from the baseline.      |
 
-Not yet exposed: `repeat_interval` (shared oneOf of `default` / `fixed` / `linear` / `exponential`). Follow-up work.
+Not yet exposed on either resource: `repeat_interval` (shared oneOf of `default` / `fixed` / `linear` / `exponential`). Follow-up work.
 
 
 

@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
 
-	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
 
@@ -34,20 +33,4 @@ func TestOrgToModel_nilBudget(t *testing.T) {
 	require.Equal(t, types.StringValue("42"), model.ID)
 	require.Equal(t, types.StringValue("new-name"), model.Name)
 	require.True(t, model.Budget.IsNull(), "budget should be null when API omits it")
-}
-
-func TestParseOrgID_valid(t *testing.T) {
-	id, err := client.ParseOrgID("42")
-	require.NoError(t, err)
-	require.Equal(t, uint64(42), id)
-}
-
-func TestParseOrgID_invalid(t *testing.T) {
-	_, err := client.ParseOrgID("not-a-number")
-	require.Error(t, err)
-}
-
-func TestParseOrgID_negative(t *testing.T) {
-	_, err := client.ParseOrgID("-1")
-	require.Error(t, err)
 }

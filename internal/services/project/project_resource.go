@@ -18,6 +18,7 @@ import (
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/tfutil"
 )
 
 var (
@@ -134,7 +135,7 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 }
 
 func (r *ProjectResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	r.client = client.ResourceFromProviderData(req.ProviderData, &resp.Diagnostics)
+	r.client = tfutil.FromProviderData[client.Client](req.ProviderData, &resp.Diagnostics)
 }
 
 func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -144,7 +145,7 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	orgID, err := client.ParseOrgID(plan.OrgID.ValueString())
+	orgID, err := strconv.ParseUint(plan.OrgID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid org_id", err.Error())
 		return
@@ -277,7 +278,7 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 // ImportState accepts "<orgID>:<projectID>" so org_id is populated even when
 // the API response omits orgId.
 func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	client.ImportStateCompoundID(ctx, req, resp, "org_id", "project_id")
+	tfutil.ImportStateCompoundID(ctx, req, resp, "org_id", "project_id")
 }
 
 func projectRequestBody(m *projectModel) (*generated.ProjectCreateRequest, error) {

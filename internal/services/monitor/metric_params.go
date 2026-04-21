@@ -5,18 +5,26 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
 
-	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/tfutil"
+)
+
+var (
+	absentPointsKinds = []string{"ignore", "alert", "zero"}
+	tolerances        = []string{"low", "medium", "high"}
 )
 
 type metricParamsModel struct {
-	Query         types.String         `tfsdk:"query"`
 	Metrics       []monitorMetricModel `tfsdk:"metrics"`
+	Query         types.String         `tfsdk:"query"`
 	Column        *columnModel         `tfsdk:"column"`
 	Resolution    types.Float64        `tfsdk:"resolution"`
 	NumEvalPoints types.Int64          `tfsdk:"num_eval_points"`
@@ -53,7 +61,116 @@ type autoDetectorModel struct {
 	MinDevAbsolute types.Float64 `tfsdk:"min_dev_absolute"`
 }
 
-func buildMetricMonitorRequest(ctx context.Context, m *monitorModel) (*generated.MetricMonitorRequest, diag.Diagnostics) {
+func metricParamsAttribute() schema.Attribute {
+	return schema.SingleNestedAttribute{
+		Required:    true,
+		Description: "Metric monitor query parameters.",
+		Attributes: map[string]schema.Attribute{
+			"metrics": monitorMetricsAttribute(),
+			"query": schema.StringAttribute{
+				Required:    true,
+				Description: "MQL query expression.",
+			},
+			"column": schema.SingleNestedAttribute{
+				Optional:    true,
+				Description: "Query result column that the detector evaluates. When unset, the server derives one from the query and the provider preserves the null state.",
+				Attributes: map[string]schema.Attribute{
+					"name": schema.StringAttribute{
+						Optional:    true,
+						Description: "Name of the query result column being monitored.",
+					},
+					"unit": schema.StringAttribute{
+						Optional:    true,
+						Description: "Display unit for the column values (e.g. \"milliseconds\", \"bytes\").",
+					},
+				},
+			},
+			"resolution": schema.Float64Attribute{
+				Optional:    true,
+				Description: "Evaluation resolution in milliseconds.",
+			},
+			"num_eval_points": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of consecutive evaluation points that must breach the threshold.",
+			},
+			"absent_points": schema.StringAttribute{
+				Optional:    true,
+				Description: "How to treat gaps in the query output (ignore, alert, zero).",
+				Validators: []validator.String{
+					stringvalidator.OneOf(absentPointsKinds...),
+				},
+			},
+			"time_offset": schema.Float64Attribute{
+				Optional:    true,
+				Description: "Time offset in milliseconds applied to the query before evaluation.",
+			},
+			"detector": schema.SingleNestedAttribute{
+				Required:    true,
+				Description: "Detector configuration. Exactly one of `manual` or `auto` must be set.",
+				Attributes: map[string]schema.Attribute{
+					"manual": schema.SingleNestedAttribute{
+						Optional:    true,
+						Description: "Manual threshold detector.",
+						Attributes: map[string]schema.Attribute{
+							"min_value": schema.Float64Attribute{Optional: true, Description: "Alert when value falls below this threshold."},
+							"max_value": schema.Float64Attribute{Optional: true, Description: "Alert when value rises above this threshold."},
+							"recovery": schema.SingleNestedAttribute{
+								Optional:    true,
+								Description: "Hysteresis thresholds used to clear an active alert.",
+								Attributes: map[string]schema.Attribute{
+									"min_value": schema.Float64Attribute{Optional: true, Description: "Clear the alert once the value rises back above this threshold."},
+									"max_value": schema.Float64Attribute{Optional: true, Description: "Clear the alert once the value falls back below this threshold."},
+								},
+							},
+						},
+					},
+					"auto": schema.SingleNestedAttribute{
+						Optional:    true,
+						Description: "Automatic trend-based detector.",
+						Attributes: map[string]schema.Attribute{
+							"tolerance": schema.StringAttribute{
+								Optional:    true,
+								Description: "Deviation tolerance (low, medium, high).",
+								Validators: []validator.String{
+									stringvalidator.OneOf(tolerances...),
+								},
+							},
+							"training_period":  schema.Float64Attribute{Optional: true, Description: "Training period in milliseconds."},
+							"min_dev_fraction": schema.Float64Attribute{Optional: true, Description: "Minimum deviation as a fraction of the baseline."},
+							"min_dev_absolute": schema.Float64Attribute{Optional: true, Description: "Minimum absolute deviation from the baseline."},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func buildMetricCreateBody(ctx context.Context, m *metricMonitorModel) (*generated.CreateMonitorBody, diag.Diagnostics) {
+	req, diags := buildMetricMonitorRequest(ctx, m)
+	if diags.HasError() {
+		return nil, diags
+	}
+	return &generated.CreateMonitorBody{
+		CreateMonitorBody_OneOf: &generated.CreateMonitorBody_OneOf{
+			Either: runtime.NewEitherFromA[generated.MetricMonitorRequest, generated.ErrorMonitorRequest](*req),
+		},
+	}, diags
+}
+
+func buildMetricUpdateBody(ctx context.Context, m *metricMonitorModel) (*generated.UpdateMonitorBody, diag.Diagnostics) {
+	req, diags := buildMetricMonitorRequest(ctx, m)
+	if diags.HasError() {
+		return nil, diags
+	}
+	return &generated.UpdateMonitorBody{
+		UpdateMonitorBody_OneOf: &generated.UpdateMonitorBody_OneOf{
+			Either: runtime.NewEitherFromA[generated.MetricMonitorRequest, generated.ErrorMonitorRequest](*req),
+		},
+	}, diags
+}
+
+func buildMetricMonitorRequest(ctx context.Context, m *metricMonitorModel) (*generated.MetricMonitorRequest, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	req := &generated.MetricMonitorRequest{
@@ -74,29 +191,29 @@ func buildMetricMonitorRequest(ctx context.Context, m *monitorModel) (*generated
 		req.TrendSensitivity = &v
 	}
 
-	teamIDs, d := client.SliceFromIntSet(ctx, path.Root("team_ids"), m.TeamIDs)
+	teamIDs, d := tfutil.SliceFromIntSet(ctx, path.Root("team_ids"), m.TeamIDs)
 	diags.Append(d...)
 	if d.HasError() {
 		return nil, diags
 	}
 	req.TeamIds = teamIDs
 
-	channelIDs, d := client.SliceFromIntSet(ctx, path.Root("channel_ids"), m.ChannelIDs)
+	channelIDs, d := tfutil.SliceFromIntSet(ctx, path.Root("channel_ids"), m.ChannelIDs)
 	diags.Append(d...)
 	if d.HasError() {
 		return nil, diags
 	}
 	req.ChannelIds = channelIDs
 
-	if m.ParamsMetric == nil {
+	if m.Params == nil {
 		diags.AddAttributeError(
-			path.Root("params_metric"),
-			"params_metric is required",
-			`params_metric block must be set when type is "metric".`,
+			path.Root("params"),
+			"params is required",
+			"params block must be set.",
 		)
 		return nil, diags
 	}
-	params, d := buildMetricParams(m.ParamsMetric)
+	params, d := buildMetricParams(m.Params)
 	diags.Append(d...)
 	if d.HasError() {
 		return nil, diags
@@ -155,9 +272,9 @@ func buildMetricParams(m *metricParamsModel) (*generated.MetricMonitorParams, di
 
 	if m.Detector == nil {
 		diags.AddAttributeError(
-			path.Root("params_metric").AtName("detector"),
+			path.Root("params").AtName("detector"),
 			"detector is required",
-			`params_metric.detector must be set for a metric monitor.`,
+			"params.detector must be set for a metric monitor.",
 		)
 		return nil, diags
 	}
@@ -177,7 +294,7 @@ func buildDetector(m *detectorModel) (*generated.DetectorConfig, diag.Diagnostic
 	switch {
 	case m.Manual != nil && m.Auto != nil:
 		diags.AddAttributeError(
-			path.Root("params_metric").AtName("detector"),
+			path.Root("params").AtName("detector"),
 			"exactly one detector kind required",
 			"detector must set exactly one of manual or auto, not both.",
 		)
@@ -202,7 +319,7 @@ func buildDetector(m *detectorModel) (*generated.DetectorConfig, diag.Diagnostic
 		}, diags
 	default:
 		diags.AddAttributeError(
-			path.Root("params_metric").AtName("detector"),
+			path.Root("params").AtName("detector"),
 			"detector kind missing",
 			"detector must set exactly one of manual or auto.",
 		)
@@ -256,8 +373,27 @@ func buildAutoDetector(m *autoDetectorModel) generated.AutoDetectorParams {
 	return out
 }
 
-func applyMetricMonitorToModel(mon *generated.Monitor, dst *monitorModel) diag.Diagnostics {
+func applyMetricMonitorToModel(mon *generated.Monitor, dst *metricMonitorModel) diag.Diagnostics {
 	var diags diag.Diagnostics
+
+	if mon.Type != generated.MonitorTypeMetric {
+		diags.AddError(
+			"monitor type mismatch",
+			fmt.Sprintf("expected metric monitor, API returned %q for monitor id=%d", mon.Type, mon.ID),
+		)
+		return diags
+	}
+
+	applyShared(mon, sharedFields{
+		ID:                    &dst.ID,
+		Name:                  &dst.Name,
+		Status:                &dst.Status,
+		NotifyEveryoneByEmail: &dst.NotifyEveryoneByEmail,
+		TrendAggFunc:          &dst.TrendAggFunc,
+		TrendSensitivity:      &dst.TrendSensitivity,
+		TeamIDs:               &dst.TeamIDs,
+		ChannelIDs:            &dst.ChannelIDs,
+	})
 
 	params, err := decodeMetricMonitorParams(mon.Params)
 	if err != nil {
@@ -265,22 +401,19 @@ func applyMetricMonitorToModel(mon *generated.Monitor, dst *monitorModel) diag.D
 		return diags
 	}
 
-	var prior *metricParamsModel
-	if dst.ParamsMetric != nil {
-		prior = dst.ParamsMetric
-	}
+	prior := dst.Params
 
 	metrics := make([]monitorMetricModel, len(params.Metrics))
 	for i, mm := range params.Metrics {
 		metrics[i] = monitorMetricModel{
 			Name:  types.StringValue(mm.Name),
-			Alias: client.StringFromPtr(mm.Alias),
+			Alias: tfutil.StringFromPtr(mm.Alias),
 		}
 	}
 
 	out := &metricParamsModel{
-		Query:   client.PreferPrior(priorMetricQuery(prior), types.StringValue(params.Query)),
 		Metrics: metrics,
+		Query:   tfutil.PreferPrior(priorMetricQuery(prior), types.StringValue(params.Query)),
 	}
 
 	// Optional metric-param scalars default on the server side (e.g. the
@@ -289,27 +422,27 @@ func applyMetricMonitorToModel(mon *generated.Monitor, dst *monitorModel) diag.D
 	// the prior null value keeps state aligned with config and avoids a
 	// post-apply consistency error; a user-set value still round-trips
 	// because prior is non-null.
-	out.AbsentPoints = client.PreserveOptional(
+	out.AbsentPoints = tfutil.PreserveOptional(
 		prior != nil && !prior.AbsentPoints.IsNull(),
-		client.EnumToValue(params.AbsentPoints), types.StringNull())
-	out.Resolution = client.PreserveOptional(
+		tfutil.EnumToValue(params.AbsentPoints), types.StringNull())
+	out.Resolution = tfutil.PreserveOptional(
 		prior != nil && !prior.Resolution.IsNull(),
-		client.Float32PtrToFloat64(params.Resolution), types.Float64Null())
-	out.TimeOffset = client.PreserveOptional(
+		tfutil.Float32PtrToFloat64(params.Resolution), types.Float64Null())
+	out.TimeOffset = tfutil.PreserveOptional(
 		prior != nil && !prior.TimeOffset.IsNull(),
-		client.Float32PtrToFloat64(params.TimeOffset), types.Float64Null())
-	out.NumEvalPoints = client.PreserveOptional(
+		tfutil.Float32PtrToFloat64(params.TimeOffset), types.Float64Null())
+	out.NumEvalPoints = tfutil.PreserveOptional(
 		prior != nil && !prior.NumEvalPoints.IsNull(),
-		client.IntPtrToInt64(params.NumEvalPoints), types.Int64Null())
+		tfutil.IntPtrToInt64(params.NumEvalPoints), types.Int64Null())
 
 	// Column is a nested object, not a scalar — preserve each inner field
 	// only when prior had that field set. The backend may normalize
-	// column.name/column.unit (e.g. "ms" → "milliseconds"); keep the user's
-	// form via PreferPrior-with-null-fallback.
+	// column.name/column.unit; keep the user's form via PreferPrior-with-
+	// null-fallback.
 	if prior != nil && prior.Column != nil && params.Column != nil {
 		out.Column = &columnModel{
-			Name: client.PreferPrior(prior.Column.Name, types.StringNull()),
-			Unit: client.PreferPrior(prior.Column.Unit, types.StringNull()),
+			Name: tfutil.PreferPrior(prior.Column.Name, types.StringNull()),
+			Unit: tfutil.PreferPrior(prior.Column.Unit, types.StringNull()),
 		}
 	}
 
@@ -320,8 +453,7 @@ func applyMetricMonitorToModel(mon *generated.Monitor, dst *monitorModel) diag.D
 	}
 	out.Detector = detector
 
-	dst.ParamsMetric = out
-	dst.ParamsError = nil
+	dst.Params = out
 
 	return diags
 }
@@ -364,13 +496,13 @@ func detectorFromRaw(rawParams map[string]any) (*detectorModel, diag.Diagnostics
 			return nil, diags
 		}
 		mm := &manualDetectorModel{
-			MinValue: client.Float32PtrToFloat64(manual.MinValue),
-			MaxValue: client.Float32PtrToFloat64(manual.MaxValue),
+			MinValue: tfutil.Float32PtrToFloat64(manual.MinValue),
+			MaxValue: tfutil.Float32PtrToFloat64(manual.MaxValue),
 		}
 		if manual.Recovery != nil {
 			mm.Recovery = &recoveryModel{
-				MinValue: client.Float32PtrToFloat64(manual.Recovery.MinValue),
-				MaxValue: client.Float32PtrToFloat64(manual.Recovery.MaxValue),
+				MinValue: tfutil.Float32PtrToFloat64(manual.Recovery.MinValue),
+				MaxValue: tfutil.Float32PtrToFloat64(manual.Recovery.MaxValue),
 			}
 		}
 		out.Manual = mm
@@ -381,10 +513,10 @@ func detectorFromRaw(rawParams map[string]any) (*detectorModel, diag.Diagnostics
 			return nil, diags
 		}
 		out.Auto = &autoDetectorModel{
-			Tolerance:      client.EnumToValue(auto.Tolerance),
-			TrainingPeriod: client.Float32PtrToFloat64(auto.TrainingPeriod),
-			MinDevFraction: client.Float32PtrToFloat64(auto.MinDevFraction),
-			MinDevAbsolute: client.Float32PtrToFloat64(auto.MinDevAbsolute),
+			Tolerance:      tfutil.EnumToValue(auto.Tolerance),
+			TrainingPeriod: tfutil.Float32PtrToFloat64(auto.TrainingPeriod),
+			MinDevFraction: tfutil.Float32PtrToFloat64(auto.MinDevFraction),
+			MinDevAbsolute: tfutil.Float32PtrToFloat64(auto.MinDevAbsolute),
 		}
 	default:
 		diags.AddError("unknown detector type", fmt.Sprintf("detector.type=%q is not supported", detectorType))
@@ -403,4 +535,33 @@ func decodeMetricMonitorParams(raw map[string]any) (*generated.MetricMonitorPara
 		return nil, fmt.Errorf("unmarshal params: %w", err)
 	}
 	return &out, nil
+}
+
+// validateDetector surfaces a diagnostic when the detector block is missing,
+// empty, or has both variants set. Used by the metric monitor's ValidateConfig.
+func validateDetector(m *metricParamsModel, diags *diag.Diagnostics) {
+	if m.Detector == nil {
+		diags.AddAttributeError(
+			path.Root("params").AtName("detector"),
+			"detector is required",
+			"params.detector must be set for a metric monitor.",
+		)
+		return
+	}
+	manualSet := m.Detector.Manual != nil
+	autoSet := m.Detector.Auto != nil
+	switch {
+	case manualSet && autoSet:
+		diags.AddAttributeError(
+			path.Root("params").AtName("detector"),
+			"detector must set exactly one kind",
+			"detector must set exactly one of `manual` or `auto`, not both.",
+		)
+	case !manualSet && !autoSet:
+		diags.AddAttributeError(
+			path.Root("params").AtName("detector"),
+			"detector must set exactly one kind",
+			"detector must set exactly one of `manual` or `auto`.",
+		)
+	}
 }

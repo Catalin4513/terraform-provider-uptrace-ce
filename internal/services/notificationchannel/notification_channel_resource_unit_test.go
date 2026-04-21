@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
 
-	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
 
@@ -362,15 +361,4 @@ func validateOpsgeniePriority(validators []validator.String, value string) valid
 		}, &resp)
 	}
 	return resp
-}
-
-func TestParseChannelID_valid(t *testing.T) {
-	id, err := client.ParseChannelID("123")
-	require.NoError(t, err)
-	require.Equal(t, int64(123), id)
-}
-
-func TestParseChannelID_invalid(t *testing.T) {
-	_, err := client.ParseChannelID("abc")
-	require.Error(t, err)
 }

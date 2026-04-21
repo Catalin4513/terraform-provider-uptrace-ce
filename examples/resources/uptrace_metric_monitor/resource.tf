@@ -7,34 +7,16 @@ resource "uptrace_project" "example" {
   name   = "api"
 }
 
-# Error monitor — fires when error trends anomalously.
-resource "uptrace_monitor" "log_errors" {
-  project_id = uptrace_project.example.id
-  name       = "Notify on all errors"
-  type       = "error"
-
-  trend_agg_func    = "sum"
-  trend_sensitivity = "medium"
-
-  params_error = {
-    query = "sum($logs) | where _system in (\"log:error\", \"log:fatal\")"
-    metrics = [
-      { name = "uptrace_tracing_logs", alias = "$logs" }
-    ]
-  }
-}
-
 # Metric monitor — anomaly detection on HTTP latency.
-resource "uptrace_monitor" "http_latency" {
+resource "uptrace_metric_monitor" "http_latency" {
   project_id = uptrace_project.example.id
   name       = "HTTP latency spike"
-  type       = "metric"
 
-  params_metric = {
-    query = "avg($http_duration)"
+  params = {
     metrics = [
       { name = "uptrace_tracing_spans", alias = "$http_duration" }
     ]
+    query = "avg($http_duration)"
     column = {
       name = "avg($http_duration)"
       unit = "milliseconds"
@@ -50,16 +32,15 @@ resource "uptrace_monitor" "http_latency" {
 }
 
 # Metric monitor — manual threshold.
-resource "uptrace_monitor" "queue_depth" {
+resource "uptrace_metric_monitor" "queue_depth" {
   project_id = uptrace_project.example.id
   name       = "Queue depth threshold"
-  type       = "metric"
 
-  params_metric = {
-    query = "sum($queue_depth)"
+  params = {
     metrics = [
       { name = "my_queue_depth", alias = "$queue_depth" }
     ]
+    query = "sum($queue_depth)"
 
     detector = {
       manual = {

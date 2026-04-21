@@ -21,6 +21,7 @@ import (
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/tfutil"
 )
 
 var (
@@ -483,7 +484,7 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 }
 
 func (r *NotificationChannelResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	r.client = client.ResourceFromProviderData(req.ProviderData, &resp.Diagnostics)
+	r.client = tfutil.FromProviderData[client.Client](req.ProviderData, &resp.Diagnostics)
 }
 
 func (r *NotificationChannelResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -539,7 +540,7 @@ func (r *NotificationChannelResource) Read(ctx context.Context, req resource.Rea
 		return
 	}
 
-	channelID, err := client.ParseChannelID(state.ID.ValueString())
+	channelID, err := strconv.ParseInt(state.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid channel ID", err.Error())
 		return
@@ -580,7 +581,7 @@ func (r *NotificationChannelResource) Update(ctx context.Context, req resource.U
 		return
 	}
 
-	channelID, err := client.ParseChannelID(plan.ID.ValueString())
+	channelID, err := strconv.ParseInt(plan.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid channel ID", err.Error())
 		return
@@ -628,7 +629,7 @@ func (r *NotificationChannelResource) Delete(ctx context.Context, req resource.D
 		return
 	}
 
-	channelID, err := client.ParseChannelID(state.ID.ValueString())
+	channelID, err := strconv.ParseInt(state.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid channel ID", err.Error())
 		return
@@ -651,7 +652,7 @@ func (r *NotificationChannelResource) Delete(ctx context.Context, req resource.D
 
 // ImportState accepts "<project_id>:<channel_id>".
 func (r *NotificationChannelResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	client.ImportStateCompoundID(ctx, req, resp, "project_id", "channel_id")
+	tfutil.ImportStateCompoundID(ctx, req, resp, "project_id", "channel_id")
 }
 
 // channelToModel maps the API response to the Terraform model.
@@ -748,9 +749,9 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		m.Slack = &slackModel{
 			AuthMethod: authMethod,
-			WebhookURL: client.PreserveIfEmptyPtr(p.WebhookURL, client.PriorString(prior, func(x *slackModel) types.String { return x.WebhookURL })),
-			Token:      client.PreserveIfEmptyPtr(p.Token, client.PriorString(prior, func(x *slackModel) types.String { return x.Token })),
-			Channel:    client.PreserveIfEmptyPtr(p.Channel, client.PriorString(prior, func(x *slackModel) types.String { return x.Channel })),
+			WebhookURL: tfutil.PreserveIfEmptyPtr(p.WebhookURL, tfutil.PriorString(prior, func(x *slackModel) types.String { return x.WebhookURL })),
+			Token:      tfutil.PreserveIfEmptyPtr(p.Token, tfutil.PriorString(prior, func(x *slackModel) types.String { return x.Token })),
+			Channel:    tfutil.PreserveIfEmptyPtr(p.Channel, tfutil.PriorString(prior, func(x *slackModel) types.String { return x.Channel })),
 		}
 
 	case generated.GoogleChat:
@@ -761,7 +762,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.GoogleChat
 		m.GoogleChat = &googleChatModel{
-			WebhookURL: client.PreserveIfEmpty(p.WebhookURL, client.PriorString(prior, func(x *googleChatModel) types.String { return x.WebhookURL })),
+			WebhookURL: tfutil.PreserveIfEmpty(p.WebhookURL, tfutil.PriorString(prior, func(x *googleChatModel) types.String { return x.WebhookURL })),
 		}
 
 	case generated.Mattermost:
@@ -772,7 +773,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Mattermost
 		m.Mattermost = &mattermostModel{
-			WebhookURL: client.PreserveIfEmpty(p.WebhookURL, client.PriorString(prior, func(x *mattermostModel) types.String { return x.WebhookURL })),
+			WebhookURL: tfutil.PreserveIfEmpty(p.WebhookURL, tfutil.PriorString(prior, func(x *mattermostModel) types.String { return x.WebhookURL })),
 		}
 
 	case generated.Pagerduty:
@@ -783,7 +784,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Pagerduty
 		m.Pagerduty = &pagerdutyModel{
-			RoutingKey: client.PreserveIfEmpty(p.RoutingKey, client.PriorString(prior, func(x *pagerdutyModel) types.String { return x.RoutingKey })),
+			RoutingKey: tfutil.PreserveIfEmpty(p.RoutingKey, tfutil.PriorString(prior, func(x *pagerdutyModel) types.String { return x.RoutingKey })),
 			Severity:   types.StringValue(string(p.Severity)),
 		}
 
@@ -795,21 +796,21 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Servicenow
 		sm := &servicenowModel{
-			URL:      client.PreserveIfEmpty(p.URL, client.PriorString(prior, func(x *servicenowModel) types.String { return x.URL })),
-			Username: client.PreserveIfEmpty(p.Username, client.PriorString(prior, func(x *servicenowModel) types.String { return x.Username })),
-			Password: client.PreserveIfEmpty(p.Password, client.PriorString(prior, func(x *servicenowModel) types.String { return x.Password })),
+			URL:      tfutil.PreserveIfEmpty(p.URL, tfutil.PriorString(prior, func(x *servicenowModel) types.String { return x.URL })),
+			Username: tfutil.PreserveIfEmpty(p.Username, tfutil.PriorString(prior, func(x *servicenowModel) types.String { return x.Username })),
+			Password: tfutil.PreserveIfEmpty(p.Password, tfutil.PriorString(prior, func(x *servicenowModel) types.String { return x.Password })),
 		}
-		sm.Category = client.StringFromPtr(p.Category)
-		sm.Subcategory = client.StringFromPtr(p.Subcategory)
-		sm.Impact = client.EnumToValue(p.Impact)
-		sm.Urgency = client.EnumToValue(p.Urgency)
-		sm.Severity = client.EnumToValue(p.Severity)
-		sm.CallerID = client.StringFromPtr(p.CallerID)
-		sm.Group = client.StringFromPtr(p.Group)
-		sm.AssignedTo = client.StringFromPtr(p.AssignedTo)
-		sm.OpenedBy = client.StringFromPtr(p.OpenedBy)
-		sm.Notify = client.EnumToValue(p.Notify)
-		sm.DueDate = client.StringFromPtr(p.DueDate)
+		sm.Category = tfutil.StringFromPtr(p.Category)
+		sm.Subcategory = tfutil.StringFromPtr(p.Subcategory)
+		sm.Impact = tfutil.EnumToValue(p.Impact)
+		sm.Urgency = tfutil.EnumToValue(p.Urgency)
+		sm.Severity = tfutil.EnumToValue(p.Severity)
+		sm.CallerID = tfutil.StringFromPtr(p.CallerID)
+		sm.Group = tfutil.StringFromPtr(p.Group)
+		sm.AssignedTo = tfutil.StringFromPtr(p.AssignedTo)
+		sm.OpenedBy = tfutil.StringFromPtr(p.OpenedBy)
+		sm.Notify = tfutil.EnumToValue(p.Notify)
+		sm.DueDate = tfutil.StringFromPtr(p.DueDate)
 		m.Servicenow = sm
 
 	case generated.Opsgenie:
@@ -820,7 +821,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Opsgenie
 		m.Opsgenie = &opsgenieModel{
-			APIKey:   client.PreserveIfEmpty(p.APIKey, client.PriorString(prior, func(x *opsgenieModel) types.String { return x.APIKey })),
+			APIKey:   tfutil.PreserveIfEmpty(p.APIKey, tfutil.PriorString(prior, func(x *opsgenieModel) types.String { return x.APIKey })),
 			Priority: types.StringValue(string(p.Priority)),
 		}
 
@@ -842,7 +843,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Teams
 		m.Teams = &teamsModel{
-			WebhookURL: client.PreserveIfEmpty(p.WebhookURL, client.PriorString(prior, func(x *teamsModel) types.String { return x.WebhookURL })),
+			WebhookURL: tfutil.PreserveIfEmpty(p.WebhookURL, tfutil.PriorString(prior, func(x *teamsModel) types.String { return x.WebhookURL })),
 		}
 
 	case generated.Pushover:
@@ -853,10 +854,10 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Pushover
 		m.Pushover = &pushoverModel{
-			Token:    client.PreserveIfEmpty(p.Token, client.PriorString(prior, func(x *pushoverModel) types.String { return x.Token })),
-			UserKey:  client.PreserveIfEmpty(p.UserKey, client.PriorString(prior, func(x *pushoverModel) types.String { return x.UserKey })),
-			Priority: client.IntPtrToValue(p.Priority, client.PriorInt64(prior, func(x *pushoverModel) types.Int64 { return x.Priority })),
-			Sound:    client.StringFromPtr(p.Sound),
+			Token:    tfutil.PreserveIfEmpty(p.Token, tfutil.PriorString(prior, func(x *pushoverModel) types.String { return x.Token })),
+			UserKey:  tfutil.PreserveIfEmpty(p.UserKey, tfutil.PriorString(prior, func(x *pushoverModel) types.String { return x.UserKey })),
+			Priority: tfutil.IntPtrToValue(p.Priority, tfutil.PriorInt64(prior, func(x *pushoverModel) types.Int64 { return x.Priority })),
+			Sound:    tfutil.StringFromPtr(p.Sound),
 		}
 
 	case generated.NotificationChannelTypeWebhook:
@@ -867,7 +868,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Webhook
 		wm := &webhookModel{
-			URL:     client.PreserveIfEmpty(p.URL, client.PriorString(prior, func(x *webhookModel) types.String { return x.URL })),
+			URL:     tfutil.PreserveIfEmpty(p.URL, tfutil.PriorString(prior, func(x *webhookModel) types.String { return x.URL })),
 			Payload: types.StringNull(),
 		}
 		if len(p.Payload) > 0 {
@@ -892,10 +893,10 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		prior := m.Alertmanager
 		m.Alertmanager = &alertmanagerModel{
 			URL:        types.StringValue(p.URL),
-			AuthMethod: client.EnumToValue(p.AuthMethod),
-			Username:   client.StringFromPtr(p.Username),
-			Password:   client.PreserveIfEmptyPtr(p.Password, client.PriorString(prior, func(x *alertmanagerModel) types.String { return x.Password })),
-			Token:      client.PreserveIfEmptyPtr(p.Token, client.PriorString(prior, func(x *alertmanagerModel) types.String { return x.Token })),
+			AuthMethod: tfutil.EnumToValue(p.AuthMethod),
+			Username:   tfutil.StringFromPtr(p.Username),
+			Password:   tfutil.PreserveIfEmptyPtr(p.Password, tfutil.PriorString(prior, func(x *alertmanagerModel) types.String { return x.Password })),
+			Token:      tfutil.PreserveIfEmptyPtr(p.Token, tfutil.PriorString(prior, func(x *alertmanagerModel) types.String { return x.Token })),
 		}
 
 	case generated.Incidentio:
@@ -907,7 +908,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		prior := m.Incidentio
 		m.Incidentio = &incidentioModel{
 			URL:    types.StringValue(p.URL),
-			APIKey: client.PreserveIfEmpty(p.APIKey, client.PriorString(prior, func(x *incidentioModel) types.String { return x.APIKey })),
+			APIKey: tfutil.PreserveIfEmpty(p.APIKey, tfutil.PriorString(prior, func(x *incidentioModel) types.String { return x.APIKey })),
 		}
 
 	default:
