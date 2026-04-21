@@ -404,4 +404,3 @@ func decodeMetricMonitorParams(raw map[string]any) (*generated.MetricMonitorPara
 	}
 	return &out, nil
 }
-
