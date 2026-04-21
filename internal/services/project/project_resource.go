@@ -278,7 +278,10 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 // ImportState accepts "<orgID>:<projectID>" so org_id is populated even when
 // the API response omits orgId.
 func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	tfutil.ImportStateCompoundID(ctx, req, resp, "org_id", "project_id")
+	tfutil.ImportStateCompoundID(ctx, req, resp,
+		tfutil.ImportField{Name: "org_id", Parse: tfutil.ParseUint64},
+		tfutil.ImportField{Name: "project_id", Parse: tfutil.ParseUint32},
+	)
 }
 
 func projectRequestBody(m *projectModel) (*generated.ProjectCreateRequest, error) {

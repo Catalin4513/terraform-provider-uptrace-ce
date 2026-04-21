@@ -229,5 +229,8 @@ func (r *MetricMonitorResource) Delete(ctx context.Context, req resource.DeleteR
 
 // ImportState accepts "<project_id>:<monitor_id>".
 func (r *MetricMonitorResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	tfutil.ImportStateCompoundID(ctx, req, resp, "project_id", "monitor_id")
+	tfutil.ImportStateCompoundID(ctx, req, resp,
+		tfutil.ImportField{Name: "project_id", Parse: tfutil.ParseUint32},
+		tfutil.ImportField{Name: "monitor_id", Parse: tfutil.ParseInt64},
+	)
 }

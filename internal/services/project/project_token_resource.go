@@ -239,7 +239,10 @@ func (r *ProjectTokenResource) Delete(ctx context.Context, req resource.DeleteRe
 
 // ImportState accepts "<project_id>:<token_id>".
 func (r *ProjectTokenResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	tfutil.ImportStateCompoundID(ctx, req, resp, "project_id", "token_id")
+	tfutil.ImportStateCompoundID(ctx, req, resp,
+		tfutil.ImportField{Name: "project_id", Parse: tfutil.ParseUint32},
+		tfutil.ImportField{Name: "token_id", Parse: tfutil.ParseUint64},
+	)
 }
 
 func projectTokenToModel(t *generated.ProjectToken, m *projectTokenModel) {
