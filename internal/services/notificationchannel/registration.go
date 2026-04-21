@@ -14,7 +14,18 @@ func (Registration) Name() string {
 
 func (Registration) Resources() []func() resource.Resource {
 	return []func() resource.Resource{
-		NewNotificationChannelResource,
+		NewAlertmanagerChannelResource,
+		NewGoogleChatChannelResource,
+		NewIncidentioChannelResource,
+		NewMattermostChannelResource,
+		NewOpsgenieChannelResource,
+		NewPagerdutyChannelResource,
+		NewPushoverChannelResource,
+		NewServicenowChannelResource,
+		NewSlackChannelResource,
+		NewTeamsChannelResource,
+		NewTelegramChannelResource,
+		NewWebhookChannelResource,
 	}
 }
 
