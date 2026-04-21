@@ -207,6 +207,32 @@ func TestChannelToModel_webhookEmptyPayload(t *testing.T) {
 	require.True(t, m.Webhook.Payload.IsNull())
 }
 
+func TestChannelToModel_webhookExplicitEmptyPayload(t *testing.T) {
+	oneOf := &generated.NotificationChannel_Params_OneOf{}
+	require.NoError(t, oneOf.UnmarshalJSON([]byte(`{
+		"url": "https://example.com/hook",
+		"payload": {}
+	}`)))
+	ch := &generated.NotificationChannel{
+		ID:         304,
+		ProjectID:  7,
+		Name:       "alerts-hook",
+		Type:       generated.NotificationChannelTypeWebhook,
+		Status:     generated.Delivering,
+		MatchAll:   runtime.Ptr(true),
+		Priorities: []generated.NotificationChannelPriorities{generated.NotificationChannelPrioritiesHigh},
+		Params: generated.NotificationChannel_Params{
+			NotificationChannel_Params_OneOf: oneOf,
+		},
+	}
+	var m notificationChannelModel
+
+	diags := channelToModel(context.Background(), ch, &m)
+	require.False(t, diags.HasError(), "channelToModel returned errors: %v", diags)
+	require.NotNil(t, m.Webhook)
+	require.Equal(t, types.StringValue(`{}`), m.Webhook.Payload)
+}
+
 func TestChannelToModel_preservesExplicitEmptyMonitorIDs(t *testing.T) {
 	emptyMonitorIDs, d := types.SetValueFrom(context.Background(), types.StringType, []types.String{})
 	require.False(t, d.HasError(), "SetValueFrom returned errors: %v", d)

@@ -1,8 +1,10 @@
 package project
 
 import (
+	"context"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
@@ -139,4 +141,13 @@ func TestParseProjectID_valid(t *testing.T) {
 func TestParseProjectID_invalid(t *testing.T) {
 	_, err := client.ParseProjectID("abc")
 	require.Error(t, err)
+}
+
+func TestProjectImportState_rejectsInvalidOrgID(t *testing.T) {
+	var resp resource.ImportStateResponse
+
+	(&ProjectResource{}).ImportState(context.Background(), resource.ImportStateRequest{ID: "abc:123"}, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid org_id in import ID")
 }

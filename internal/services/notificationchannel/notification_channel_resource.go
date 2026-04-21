@@ -874,7 +874,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 			URL:     tfutil.PreserveIfEmpty(p.URL, tfutil.PriorString(prior, func(x *webhookModel) types.String { return x.URL })),
 			Payload: types.StringNull(),
 		}
-		if len(p.Payload) > 0 {
+		if p.Payload != nil {
 			buf, err := json.Marshal(p.Payload)
 			if err != nil {
 				diags.AddWarning(

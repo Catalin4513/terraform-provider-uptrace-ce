@@ -138,10 +138,9 @@ func TestApplyMetricMonitor_autoDetector(t *testing.T) {
 	require.Equal(t, "high", dst.Params.Detector.Auto.Tolerance.ValueString())
 }
 
-// When prior state does not set column (typical import / user didn't specify
-// one), the server-derived column is preserved as null to avoid a post-apply
-// consistency error.
-func TestApplyMetricMonitor_columnPreservedAsNull(t *testing.T) {
+// When prior state exists but the user omitted optional fields from config,
+// keep them null instead of surfacing server defaults into state.
+func TestApplyMetricMonitor_columnPreservedAsNullWhenPriorExists(t *testing.T) {
 	mon := &generated.Monitor{
 		ID:     101,
 		Name:   "latency",
@@ -160,7 +159,7 @@ func TestApplyMetricMonitor_columnPreservedAsNull(t *testing.T) {
 			},
 		},
 	}
-	dst := &metricMonitorModel{}
+	dst := &metricMonitorModel{Params: &metricParamsModel{}}
 
 	diags := applyMetricMonitorToModel(mon, dst)
 	require.False(t, diags.HasError(), "unexpected errors: %v", diags)
@@ -168,6 +167,42 @@ func TestApplyMetricMonitor_columnPreservedAsNull(t *testing.T) {
 	require.True(t, dst.Params.Resolution.IsNull(), "server-defaulted resolution must stay null")
 	require.True(t, dst.Params.AbsentPoints.IsNull(), "server-defaulted absent_points must stay null")
 	require.True(t, dst.Params.NumEvalPoints.IsNull(), "server-defaulted num_eval_points must stay null")
+}
+
+func TestApplyMetricMonitor_importHydratesRemoteOptionalFields(t *testing.T) {
+	mon := &generated.Monitor{
+		ID:     105,
+		Name:   "latency",
+		Type:   generated.MonitorTypeMetric,
+		Status: generated.Active,
+		Params: map[string]any{
+			"query":         "avg($http)",
+			"metrics":       []any{map[string]any{"name": "http", "alias": "$http"}},
+			"column":        map[string]any{"name": "derived-by-server", "unit": "milliseconds"},
+			"resolution":    60000,
+			"absentPoints":  "alert",
+			"numEvalPoints": 5,
+			"timeOffset":    30000,
+			"detector": map[string]any{
+				"type": "auto",
+				"params": map[string]any{
+					"tolerance": "medium",
+				},
+			},
+		},
+	}
+	dst := &metricMonitorModel{}
+
+	diags := applyMetricMonitorToModel(mon, dst)
+	require.False(t, diags.HasError(), "unexpected errors: %v", diags)
+	require.NotNil(t, dst.Params)
+	require.NotNil(t, dst.Params.Column)
+	require.Equal(t, "derived-by-server", dst.Params.Column.Name.ValueString())
+	require.Equal(t, "milliseconds", dst.Params.Column.Unit.ValueString())
+	require.Equal(t, 60000.0, dst.Params.Resolution.ValueFloat64())
+	require.Equal(t, "alert", dst.Params.AbsentPoints.ValueString())
+	require.Equal(t, int64(5), dst.Params.NumEvalPoints.ValueInt64())
+	require.Equal(t, 30000.0, dst.Params.TimeOffset.ValueFloat64())
 }
 
 // User sets column.unit only. The backend auto-fills Column.Name from the

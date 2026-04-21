@@ -126,6 +126,30 @@ func TestBuildRequestBody_webhookWithPayload(t *testing.T) {
 	require.ElementsMatch(t, []any{"prod", "api"}, p.Payload["tags"])
 }
 
+func TestBuildRequestBody_webhookWithEmptyPayload(t *testing.T) {
+	priorities, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"high"})
+	m := &notificationChannelModel{
+		Name:       types.StringValue("alerts-hook"),
+		Type:       types.StringValue("webhook"),
+		MatchAll:   types.BoolValue(true),
+		Condition:  types.StringNull(),
+		Priorities: priorities,
+		MonitorIDs: types.SetNull(types.StringType),
+		Webhook: &webhookModel{
+			URL:     types.StringValue("https://example.com/hook"),
+			Payload: types.StringValue(`{}`),
+		},
+	}
+
+	body, diags := buildRequestBody(context.Background(), m)
+	require.False(t, diags.HasError(), "unexpected errors: %v", diags)
+
+	p, err := body.Params.NotificationChannelRequest_Params_OneOf.AsWebhookParams()
+	require.NoError(t, err)
+	require.NotNil(t, p.Payload)
+	require.Len(t, p.Payload, 0)
+}
+
 func TestBuildRequestBody_webhookInvalidPayload(t *testing.T) {
 	priorities, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"high"})
 	m := &notificationChannelModel{

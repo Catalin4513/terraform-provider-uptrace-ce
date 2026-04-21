@@ -416,33 +416,44 @@ func applyMetricMonitorToModel(mon *generated.Monitor, dst *metricMonitorModel) 
 		Query:   tfutil.PreferPrior(priorMetricQuery(prior), types.StringValue(params.Query)),
 	}
 
+	importing := prior == nil
+
 	// Optional metric-param scalars default on the server side (e.g. the
 	// backend populates column from the query, resolution=60000ms, and
 	// absent_points="alert" when the user leaves them unset). Preserving
 	// the prior null value keeps state aligned with config and avoids a
 	// post-apply consistency error; a user-set value still round-trips
-	// because prior is non-null.
+	// because prior is non-null. Imports have no prior state, so in that case
+	// hydrate the API values into state verbatim.
 	out.AbsentPoints = tfutil.PreserveOptional(
-		prior != nil && !prior.AbsentPoints.IsNull(),
+		importing || (prior != nil && !prior.AbsentPoints.IsNull()),
 		tfutil.EnumToValue(params.AbsentPoints), types.StringNull())
 	out.Resolution = tfutil.PreserveOptional(
-		prior != nil && !prior.Resolution.IsNull(),
+		importing || (prior != nil && !prior.Resolution.IsNull()),
 		tfutil.Float32PtrToFloat64(params.Resolution), types.Float64Null())
 	out.TimeOffset = tfutil.PreserveOptional(
-		prior != nil && !prior.TimeOffset.IsNull(),
+		importing || (prior != nil && !prior.TimeOffset.IsNull()),
 		tfutil.Float32PtrToFloat64(params.TimeOffset), types.Float64Null())
 	out.NumEvalPoints = tfutil.PreserveOptional(
-		prior != nil && !prior.NumEvalPoints.IsNull(),
+		importing || (prior != nil && !prior.NumEvalPoints.IsNull()),
 		tfutil.IntPtrToInt64(params.NumEvalPoints), types.Int64Null())
 
 	// Column is a nested object, not a scalar — preserve each inner field
 	// only when prior had that field set. The backend may normalize
 	// column.name/column.unit; keep the user's form via PreferPrior-with-
 	// null-fallback.
-	if prior != nil && prior.Column != nil && params.Column != nil {
-		out.Column = &columnModel{
-			Name: tfutil.PreferPrior(prior.Column.Name, types.StringNull()),
-			Unit: tfutil.PreferPrior(prior.Column.Unit, types.StringNull()),
+	if params.Column != nil {
+		switch {
+		case importing:
+			out.Column = &columnModel{
+				Name: tfutil.StringFromPtr(params.Column.Name),
+				Unit: tfutil.StringFromPtr(params.Column.Unit),
+			}
+		case prior != nil && prior.Column != nil:
+			out.Column = &columnModel{
+				Name: tfutil.PreferPrior(prior.Column.Name, types.StringNull()),
+				Unit: tfutil.PreferPrior(prior.Column.Unit, types.StringNull()),
+			}
 		}
 	}
 
