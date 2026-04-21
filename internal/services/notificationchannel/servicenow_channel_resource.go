@@ -277,7 +277,7 @@ func applyServicenowToModel(ctx context.Context, ch *generated.NotificationChann
 		return diags
 	}
 	dst.URL = tfutil.PreserveIfEmpty(p.URL, dst.URL)
-	dst.Username = tfutil.PreserveIfEmpty(p.Username, dst.Username)
+	dst.Username = types.StringValue(p.Username)
 	dst.Password = tfutil.PreserveIfEmpty(p.Password, dst.Password)
 	dst.Category = tfutil.StringFromPtr(p.Category)
 	dst.Subcategory = tfutil.StringFromPtr(p.Subcategory)
