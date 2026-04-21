@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultRequestTimeout = 10 * time.Second
+	defaultRequestTimeout = 30 * time.Second
 	maxRetries            = 2
 	retryWaitMax          = 5 * time.Second
 )
@@ -80,26 +80,12 @@ func (a *httpDoerAdapter) Do(ctx context.Context, req *http.Request) (*http.Resp
 	return a.client.Do(req.WithContext(ctx))
 }
 
-// ParseOrgID parses a string organization ID into a uint64.
-func ParseOrgID(s string) (uint64, error) {
-	return strconv.ParseUint(s, 10, 64)
-}
-
-// ParseProjectID parses a string project ID into a uint32.
+// ParseProjectID parses a string project ID into the uint32 width used by the
+// Uptrace API.
 func ParseProjectID(s string) (uint32, error) {
 	v, err := strconv.ParseUint(s, 10, 32)
 	if err != nil {
 		return 0, err
 	}
 	return uint32(v), nil
-}
-
-// ParseTokenID parses a string token ID into a uint64.
-func ParseTokenID(s string) (uint64, error) {
-	return strconv.ParseUint(s, 10, 64)
-}
-
-// ParseChannelID parses a string notification channel ID into an int64.
-func ParseChannelID(s string) (int64, error) {
-	return strconv.ParseInt(s, 10, 64)
 }

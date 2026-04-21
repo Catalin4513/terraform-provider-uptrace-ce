@@ -34,19 +34,3 @@ func TestOrgToModel_nilBudget(t *testing.T) {
 	require.Equal(t, types.StringValue("new-name"), model.Name)
 	require.True(t, model.Budget.IsNull(), "budget should be null when API omits it")
 }
-
-func TestParseOrgID_valid(t *testing.T) {
-	id, err := parseOrgID("42")
-	require.NoError(t, err)
-	require.Equal(t, uint64(42), id)
-}
-
-func TestParseOrgID_invalid(t *testing.T) {
-	_, err := parseOrgID("not-a-number")
-	require.Error(t, err)
-}
-
-func TestParseOrgID_negative(t *testing.T) {
-	_, err := parseOrgID("-1")
-	require.Error(t, err)
-}

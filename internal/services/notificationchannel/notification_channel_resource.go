@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/tfutil"
 )
 
 var (
@@ -46,7 +46,7 @@ type notificationChannelModel struct {
 	Condition types.String `tfsdk:"condition"`
 
 	Priorities types.List `tfsdk:"priorities"`
-	MonitorIDs types.List `tfsdk:"monitor_ids"`
+	MonitorIDs types.Set  `tfsdk:"monitor_ids"`
 
 	// Type-specific param blocks (exactly one must be set).
 	Slack        *slackModel        `tfsdk:"slack"`
@@ -214,7 +214,7 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 					listvalidator.ValueStringsAre(stringvalidator.OneOf(priorities...)),
 				},
 			},
-			"monitor_ids": schema.ListAttribute{
+			"monitor_ids": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "Monitor IDs to match when match_all is false.",
@@ -484,18 +484,7 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 }
 
 func (r *NotificationChannelResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-
-	c, ok := req.ProviderData.(*client.Client)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"unexpected provider data type",
-			fmt.Sprintf("expected *client.Client, got %T", req.ProviderData))
-		return
-	}
-	r.client = c
+	r.client = tfutil.FromProviderData[client.Client](req.ProviderData, &resp.Diagnostics)
 }
 
 func (r *NotificationChannelResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -505,7 +494,7 @@ func (r *NotificationChannelResource) Create(ctx context.Context, req resource.C
 		return
 	}
 
-	projectID, err := parseProjectID(plan.ProjectID.ValueString())
+	projectID, err := client.ParseProjectID(plan.ProjectID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project_id", err.Error())
 		return
@@ -545,13 +534,13 @@ func (r *NotificationChannelResource) Read(ctx context.Context, req resource.Rea
 		return
 	}
 
-	projectID, err := parseProjectID(state.ProjectID.ValueString())
+	projectID, err := client.ParseProjectID(state.ProjectID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project_id", err.Error())
 		return
 	}
 
-	channelID, err := parseChannelID(state.ID.ValueString())
+	channelID, err := strconv.ParseInt(state.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid channel ID", err.Error())
 		return
@@ -586,13 +575,13 @@ func (r *NotificationChannelResource) Update(ctx context.Context, req resource.U
 		return
 	}
 
-	projectID, err := parseProjectID(plan.ProjectID.ValueString())
+	projectID, err := client.ParseProjectID(plan.ProjectID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project_id", err.Error())
 		return
 	}
 
-	channelID, err := parseChannelID(plan.ID.ValueString())
+	channelID, err := strconv.ParseInt(plan.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid channel ID", err.Error())
 		return
@@ -634,13 +623,13 @@ func (r *NotificationChannelResource) Delete(ctx context.Context, req resource.D
 		return
 	}
 
-	projectID, err := parseProjectID(state.ProjectID.ValueString())
+	projectID, err := client.ParseProjectID(state.ProjectID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project_id", err.Error())
 		return
 	}
 
-	channelID, err := parseChannelID(state.ID.ValueString())
+	channelID, err := strconv.ParseInt(state.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid channel ID", err.Error())
 		return
@@ -663,32 +652,10 @@ func (r *NotificationChannelResource) Delete(ctx context.Context, req resource.D
 
 // ImportState accepts "<project_id>:<channel_id>".
 func (r *NotificationChannelResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	parts := strings.Split(req.ID, ":")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		resp.Diagnostics.AddError(
-			"invalid import ID",
-			fmt.Sprintf("expected format <project_id>:<channel_id>, got %q", req.ID),
-		)
-		return
-	}
-	if _, err := parseProjectID(parts[0]); err != nil {
-		resp.Diagnostics.AddError("invalid project_id in import ID", err.Error())
-		return
-	}
-	if _, err := parseChannelID(parts[1]); err != nil {
-		resp.Diagnostics.AddError("invalid channel_id in import ID", err.Error())
-		return
-	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), parts[0])...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
-}
-
-func parseProjectID(s string) (uint32, error) {
-	return client.ParseProjectID(s)
-}
-
-func parseChannelID(s string) (int64, error) {
-	return client.ParseChannelID(s)
+	tfutil.ImportStateCompoundID(ctx, req, resp,
+		tfutil.ImportField{Name: "project_id", Parse: tfutil.ParseUint32},
+		tfutil.ImportField{Name: "channel_id", Parse: tfutil.ParseInt64},
+	)
 }
 
 // channelToModel maps the API response to the Terraform model.
@@ -728,7 +695,7 @@ func channelToModel(ctx context.Context, ch *generated.NotificationChannel, m *n
 		diags.Append(d...)
 	}
 
-	// MonitorIDs. Preserve an explicit empty list from prior state so a user
+	// MonitorIDs. Preserve an explicit empty set from prior state so a user
 	// writing `monitor_ids = []` round-trips instead of flipping to null.
 	switch {
 	case len(ch.MonitorIds) > 0:
@@ -737,12 +704,12 @@ func channelToModel(ctx context.Context, ch *generated.NotificationChannel, m *n
 			vals[i] = types.StringValue(strconv.FormatInt(id, 10))
 		}
 		var d diag.Diagnostics
-		m.MonitorIDs, d = types.ListValueFrom(ctx, types.StringType, vals)
+		m.MonitorIDs, d = types.SetValueFrom(ctx, types.StringType, vals)
 		diags.Append(d...)
 	case !m.MonitorIDs.IsNull() && !m.MonitorIDs.IsUnknown() && len(m.MonitorIDs.Elements()) == 0:
-		// Prior was an explicit empty list; keep it.
+		// Prior was an explicit empty set; keep it.
 	default:
-		m.MonitorIDs = types.ListNull(types.StringType)
+		m.MonitorIDs = types.SetNull(types.StringType)
 	}
 
 	// Params — map into the correct nested block based on type.
@@ -785,9 +752,9 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		m.Slack = &slackModel{
 			AuthMethod: authMethod,
-			WebhookURL: preserveIfEmptyPtr(p.WebhookURL, priorString(prior, func(x *slackModel) types.String { return x.WebhookURL })),
-			Token:      preserveIfEmptyPtr(p.Token, priorString(prior, func(x *slackModel) types.String { return x.Token })),
-			Channel:    preserveIfEmptyPtr(p.Channel, priorString(prior, func(x *slackModel) types.String { return x.Channel })),
+			WebhookURL: tfutil.PreserveIfEmptyPtr(p.WebhookURL, tfutil.PriorString(prior, func(x *slackModel) types.String { return x.WebhookURL })),
+			Token:      tfutil.PreserveIfEmptyPtr(p.Token, tfutil.PriorString(prior, func(x *slackModel) types.String { return x.Token })),
+			Channel:    tfutil.PreserveIfEmptyPtr(p.Channel, tfutil.PriorString(prior, func(x *slackModel) types.String { return x.Channel })),
 		}
 
 	case generated.GoogleChat:
@@ -798,7 +765,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.GoogleChat
 		m.GoogleChat = &googleChatModel{
-			WebhookURL: preserveIfEmpty(p.WebhookURL, priorString(prior, func(x *googleChatModel) types.String { return x.WebhookURL })),
+			WebhookURL: tfutil.PreserveIfEmpty(p.WebhookURL, tfutil.PriorString(prior, func(x *googleChatModel) types.String { return x.WebhookURL })),
 		}
 
 	case generated.Mattermost:
@@ -809,7 +776,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Mattermost
 		m.Mattermost = &mattermostModel{
-			WebhookURL: preserveIfEmpty(p.WebhookURL, priorString(prior, func(x *mattermostModel) types.String { return x.WebhookURL })),
+			WebhookURL: tfutil.PreserveIfEmpty(p.WebhookURL, tfutil.PriorString(prior, func(x *mattermostModel) types.String { return x.WebhookURL })),
 		}
 
 	case generated.Pagerduty:
@@ -820,7 +787,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Pagerduty
 		m.Pagerduty = &pagerdutyModel{
-			RoutingKey: preserveIfEmpty(p.RoutingKey, priorString(prior, func(x *pagerdutyModel) types.String { return x.RoutingKey })),
+			RoutingKey: tfutil.PreserveIfEmpty(p.RoutingKey, tfutil.PriorString(prior, func(x *pagerdutyModel) types.String { return x.RoutingKey })),
 			Severity:   types.StringValue(string(p.Severity)),
 		}
 
@@ -832,21 +799,21 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Servicenow
 		sm := &servicenowModel{
-			URL:      preserveIfEmpty(p.URL, priorString(prior, func(x *servicenowModel) types.String { return x.URL })),
-			Username: preserveIfEmpty(p.Username, priorString(prior, func(x *servicenowModel) types.String { return x.Username })),
-			Password: preserveIfEmpty(p.Password, priorString(prior, func(x *servicenowModel) types.String { return x.Password })),
+			URL:      tfutil.PreserveIfEmpty(p.URL, tfutil.PriorString(prior, func(x *servicenowModel) types.String { return x.URL })),
+			Username: tfutil.PreserveIfEmpty(p.Username, tfutil.PriorString(prior, func(x *servicenowModel) types.String { return x.Username })),
+			Password: tfutil.PreserveIfEmpty(p.Password, tfutil.PriorString(prior, func(x *servicenowModel) types.String { return x.Password })),
 		}
-		sm.Category = optionalStringToValue(p.Category)
-		sm.Subcategory = optionalStringToValue(p.Subcategory)
-		sm.Impact = enumToValue(p.Impact)
-		sm.Urgency = enumToValue(p.Urgency)
-		sm.Severity = enumToValue(p.Severity)
-		sm.CallerID = optionalStringToValue(p.CallerID)
-		sm.Group = optionalStringToValue(p.Group)
-		sm.AssignedTo = optionalStringToValue(p.AssignedTo)
-		sm.OpenedBy = optionalStringToValue(p.OpenedBy)
-		sm.Notify = enumToValue(p.Notify)
-		sm.DueDate = optionalStringToValue(p.DueDate)
+		sm.Category = tfutil.StringFromPtr(p.Category)
+		sm.Subcategory = tfutil.StringFromPtr(p.Subcategory)
+		sm.Impact = tfutil.EnumToValue(p.Impact)
+		sm.Urgency = tfutil.EnumToValue(p.Urgency)
+		sm.Severity = tfutil.EnumToValue(p.Severity)
+		sm.CallerID = tfutil.StringFromPtr(p.CallerID)
+		sm.Group = tfutil.StringFromPtr(p.Group)
+		sm.AssignedTo = tfutil.StringFromPtr(p.AssignedTo)
+		sm.OpenedBy = tfutil.StringFromPtr(p.OpenedBy)
+		sm.Notify = tfutil.EnumToValue(p.Notify)
+		sm.DueDate = tfutil.StringFromPtr(p.DueDate)
 		m.Servicenow = sm
 
 	case generated.Opsgenie:
@@ -857,7 +824,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Opsgenie
 		m.Opsgenie = &opsgenieModel{
-			APIKey:   preserveIfEmpty(p.APIKey, priorString(prior, func(x *opsgenieModel) types.String { return x.APIKey })),
+			APIKey:   tfutil.PreserveIfEmpty(p.APIKey, tfutil.PriorString(prior, func(x *opsgenieModel) types.String { return x.APIKey })),
 			Priority: types.StringValue(string(p.Priority)),
 		}
 
@@ -879,7 +846,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Teams
 		m.Teams = &teamsModel{
-			WebhookURL: preserveIfEmpty(p.WebhookURL, priorString(prior, func(x *teamsModel) types.String { return x.WebhookURL })),
+			WebhookURL: tfutil.PreserveIfEmpty(p.WebhookURL, tfutil.PriorString(prior, func(x *teamsModel) types.String { return x.WebhookURL })),
 		}
 
 	case generated.Pushover:
@@ -890,10 +857,10 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Pushover
 		m.Pushover = &pushoverModel{
-			Token:    preserveIfEmpty(p.Token, priorString(prior, func(x *pushoverModel) types.String { return x.Token })),
-			UserKey:  preserveIfEmpty(p.UserKey, priorString(prior, func(x *pushoverModel) types.String { return x.UserKey })),
-			Priority: intPtrToValue(p.Priority, priorInt64(prior, func(x *pushoverModel) types.Int64 { return x.Priority })),
-			Sound:    optionalStringToValue(p.Sound),
+			Token:    tfutil.PreserveIfEmpty(p.Token, tfutil.PriorString(prior, func(x *pushoverModel) types.String { return x.Token })),
+			UserKey:  tfutil.PreserveIfEmpty(p.UserKey, tfutil.PriorString(prior, func(x *pushoverModel) types.String { return x.UserKey })),
+			Priority: tfutil.IntPtrToValue(p.Priority, tfutil.PriorInt64(prior, func(x *pushoverModel) types.Int64 { return x.Priority })),
+			Sound:    tfutil.StringFromPtr(p.Sound),
 		}
 
 	case generated.NotificationChannelTypeWebhook:
@@ -904,10 +871,10 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		}
 		prior := m.Webhook
 		wm := &webhookModel{
-			URL:     preserveIfEmpty(p.URL, priorString(prior, func(x *webhookModel) types.String { return x.URL })),
+			URL:     tfutil.PreserveIfEmpty(p.URL, tfutil.PriorString(prior, func(x *webhookModel) types.String { return x.URL })),
 			Payload: types.StringNull(),
 		}
-		if len(p.Payload) > 0 {
+		if p.Payload != nil {
 			buf, err := json.Marshal(p.Payload)
 			if err != nil {
 				diags.AddWarning(
@@ -929,10 +896,10 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		prior := m.Alertmanager
 		m.Alertmanager = &alertmanagerModel{
 			URL:        types.StringValue(p.URL),
-			AuthMethod: enumToValue(p.AuthMethod),
-			Username:   optionalStringToValue(p.Username),
-			Password:   preserveIfEmptyPtr(p.Password, priorString(prior, func(x *alertmanagerModel) types.String { return x.Password })),
-			Token:      preserveIfEmptyPtr(p.Token, priorString(prior, func(x *alertmanagerModel) types.String { return x.Token })),
+			AuthMethod: tfutil.EnumToValue(p.AuthMethod),
+			Username:   tfutil.StringFromPtr(p.Username),
+			Password:   tfutil.PreserveIfEmptyPtr(p.Password, tfutil.PriorString(prior, func(x *alertmanagerModel) types.String { return x.Password })),
+			Token:      tfutil.PreserveIfEmptyPtr(p.Token, tfutil.PriorString(prior, func(x *alertmanagerModel) types.String { return x.Token })),
 		}
 
 	case generated.Incidentio:
@@ -944,7 +911,7 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 		prior := m.Incidentio
 		m.Incidentio = &incidentioModel{
 			URL:    types.StringValue(p.URL),
-			APIKey: preserveIfEmpty(p.APIKey, priorString(prior, func(x *incidentioModel) types.String { return x.APIKey })),
+			APIKey: tfutil.PreserveIfEmpty(p.APIKey, tfutil.PriorString(prior, func(x *incidentioModel) types.String { return x.APIKey })),
 		}
 
 	default:
@@ -954,68 +921,6 @@ func paramsToModel(ctx context.Context, ch *generated.NotificationChannel, m *no
 	}
 
 	return diags
-}
-
-func optionalStringToValue(s *string) types.String {
-	if s != nil && *s != "" {
-		return types.StringValue(*s)
-	}
-	return types.StringNull()
-}
-
-func preserveIfEmpty(api string, prior types.String) types.String {
-	if api == "" {
-		return prior
-	}
-	return types.StringValue(api)
-}
-
-// preserveIfEmptyPtr is preserveIfEmpty for *string-shaped API fields, where
-// the backend distinguishes nil-pointer from pointer-to-empty but neither
-// should clobber the prior state value.
-func preserveIfEmptyPtr(api *string, prior types.String) types.String {
-	if api == nil || *api == "" {
-		return prior
-	}
-	return types.StringValue(*api)
-}
-
-func priorString[T any](prior *T, get func(*T) types.String) types.String {
-	if prior == nil {
-		return types.StringNull()
-	}
-	return get(prior)
-}
-
-func priorInt64[T any](prior *T, get func(*T) types.Int64) types.Int64 {
-	if prior == nil {
-		return types.Int64Null()
-	}
-	return get(prior)
-}
-
-// enumToValue maps a *Enum (string-backed) API field to types.String. nil or
-// empty-string pointer collapses to Null so a plan-null value matches
-// post-apply state even when the backend echoes "" for an unset enum.
-func enumToValue[T ~string](p *T) types.String {
-	if p == nil || *p == "" {
-		return types.StringNull()
-	}
-	return types.StringValue(string(*p))
-}
-
-// intPtrToValue maps a *int API field to types.Int64. A nil or zero pointer
-// with a null prior collapses to Null (matching a plan where the user did not
-// set the field); otherwise the API value surfaces so out-of-band drift to a
-// non-zero value is still visible.
-func intPtrToValue(api *int, prior types.Int64) types.Int64 {
-	if api == nil {
-		return prior
-	}
-	if *api == 0 && prior.IsNull() {
-		return types.Int64Null()
-	}
-	return types.Int64Value(int64(*api))
 }
 
 // jsonObjectValidator ensures a string attribute parses as a JSON object

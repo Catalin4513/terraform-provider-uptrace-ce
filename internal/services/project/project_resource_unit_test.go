@@ -1,13 +1,16 @@
 package project
 
 import (
+	"context"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
 	str2duration "github.com/xhit/go-str2duration/v2"
 
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
 
@@ -130,12 +133,21 @@ func TestProjectRequestBody_semconvEnumIsPassedThrough(t *testing.T) {
 }
 
 func TestParseProjectID_valid(t *testing.T) {
-	id, err := parseProjectID("123")
+	id, err := client.ParseProjectID("123")
 	require.NoError(t, err)
 	require.Equal(t, uint32(123), id)
 }
 
 func TestParseProjectID_invalid(t *testing.T) {
-	_, err := parseProjectID("abc")
+	_, err := client.ParseProjectID("abc")
 	require.Error(t, err)
+}
+
+func TestProjectImportState_rejectsInvalidOrgID(t *testing.T) {
+	var resp resource.ImportStateResponse
+
+	(&ProjectResource{}).ImportState(context.Background(), resource.ImportStateRequest{ID: "abc:123"}, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid org_id in import ID")
 }

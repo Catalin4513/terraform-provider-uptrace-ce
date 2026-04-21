@@ -228,8 +228,8 @@ func buildRequestBody(ctx context.Context, m *notificationChannelModel) (*genera
 			diags.AddError("missing webhook block", "webhook block is required when type is webhook")
 			return nil, diags
 		}
-		params := generated.WebhookParams{
-			URL: m.Webhook.URL.ValueString(),
+		rawParams := map[string]any{
+			"url": m.Webhook.URL.ValueString(),
 		}
 		if !m.Webhook.Payload.IsNull() && !m.Webhook.Payload.IsUnknown() {
 			var payload map[string]any
@@ -237,9 +237,14 @@ func buildRequestBody(ctx context.Context, m *notificationChannelModel) (*genera
 				diags.AddError("invalid webhook payload", err.Error())
 				return nil, diags
 			}
-			params.Payload = payload
+			rawParams["payload"] = payload
 		}
-		if err := oneOf.FromWebhookParams(params); err != nil {
+		rawJSON, err := json.Marshal(rawParams)
+		if err != nil {
+			diags.AddError("failed to encode webhook params", err.Error())
+			return nil, diags
+		}
+		if err := oneOf.UnmarshalJSON(rawJSON); err != nil {
 			diags.AddError("failed to set webhook params", err.Error())
 			return nil, diags
 		}

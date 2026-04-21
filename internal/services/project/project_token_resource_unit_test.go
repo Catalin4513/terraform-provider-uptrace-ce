@@ -1,8 +1,10 @@
 package project
 
 import (
+	"context"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
@@ -74,13 +76,11 @@ func TestProjectTokenToModel_emptyNameTreatedAsNull(t *testing.T) {
 		"empty string name from API must map to null to avoid drift when user omits name")
 }
 
-func TestParseTokenID_valid(t *testing.T) {
-	id, err := parseTokenID("123")
-	require.NoError(t, err)
-	require.Equal(t, uint64(123), id)
-}
+func TestProjectTokenImportState_rejectsInvalidTokenID(t *testing.T) {
+	var resp resource.ImportStateResponse
 
-func TestParseTokenID_invalid(t *testing.T) {
-	_, err := parseTokenID("abc")
-	require.Error(t, err)
+	(&ProjectTokenResource{}).ImportState(context.Background(), resource.ImportStateRequest{ID: "7:not-a-token"}, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid token_id in import ID")
 }

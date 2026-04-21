@@ -2,7 +2,6 @@ package org
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/tfutil"
 )
 
 var (
@@ -75,18 +75,7 @@ func (r *OrgResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 }
 
 func (r *OrgResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-
-	c, ok := req.ProviderData.(*client.Client)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"unexpected provider data type",
-			fmt.Sprintf("expected *client.Client, got %T", req.ProviderData))
-		return
-	}
-	r.client = c
+	r.client = tfutil.FromProviderData[client.Client](req.ProviderData, &resp.Diagnostics)
 }
 
 func (r *OrgResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -125,7 +114,7 @@ func (r *OrgResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 		return
 	}
 
-	orgID, err := parseOrgID(state.ID.ValueString())
+	orgID, err := strconv.ParseUint(state.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid org ID", err.Error())
 		return
@@ -161,7 +150,7 @@ func (r *OrgResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		return
 	}
 
-	orgID, err := parseOrgID(plan.ID.ValueString())
+	orgID, err := strconv.ParseUint(plan.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid org ID", err.Error())
 		return
@@ -206,7 +195,7 @@ func (r *OrgResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 		return
 	}
 
-	orgID, err := parseOrgID(state.ID.ValueString())
+	orgID, err := strconv.ParseUint(state.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid org ID", err.Error())
 		return
@@ -234,8 +223,4 @@ func orgToModel(org *generated.Org, m *orgModel) {
 	} else {
 		m.Budget = types.Float64Null()
 	}
-}
-
-func parseOrgID(s string) (uint64, error) {
-	return client.ParseOrgID(s)
 }
