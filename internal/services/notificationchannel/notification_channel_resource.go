@@ -46,7 +46,7 @@ type notificationChannelModel struct {
 	Condition types.String `tfsdk:"condition"`
 
 	Priorities types.List `tfsdk:"priorities"`
-	MonitorIDs types.List `tfsdk:"monitor_ids"`
+	MonitorIDs types.Set  `tfsdk:"monitor_ids"`
 
 	// Type-specific param blocks (exactly one must be set).
 	Slack        *slackModel        `tfsdk:"slack"`
@@ -214,7 +214,7 @@ func (r *NotificationChannelResource) Schema(_ context.Context, _ resource.Schem
 					listvalidator.ValueStringsAre(stringvalidator.OneOf(priorities...)),
 				},
 			},
-			"monitor_ids": schema.ListAttribute{
+			"monitor_ids": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "Monitor IDs to match when match_all is false.",
@@ -652,7 +652,10 @@ func (r *NotificationChannelResource) Delete(ctx context.Context, req resource.D
 
 // ImportState accepts "<project_id>:<channel_id>".
 func (r *NotificationChannelResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	tfutil.ImportStateCompoundID(ctx, req, resp, "project_id", "channel_id")
+	tfutil.ImportStateCompoundID(ctx, req, resp,
+		tfutil.ImportField{Name: "project_id", Parse: tfutil.ParseUint32},
+		tfutil.ImportField{Name: "channel_id", Parse: tfutil.ParseInt64},
+	)
 }
 
 // channelToModel maps the API response to the Terraform model.
@@ -692,7 +695,7 @@ func channelToModel(ctx context.Context, ch *generated.NotificationChannel, m *n
 		diags.Append(d...)
 	}
 
-	// MonitorIDs. Preserve an explicit empty list from prior state so a user
+	// MonitorIDs. Preserve an explicit empty set from prior state so a user
 	// writing `monitor_ids = []` round-trips instead of flipping to null.
 	switch {
 	case len(ch.MonitorIds) > 0:
@@ -701,12 +704,12 @@ func channelToModel(ctx context.Context, ch *generated.NotificationChannel, m *n
 			vals[i] = types.StringValue(strconv.FormatInt(id, 10))
 		}
 		var d diag.Diagnostics
-		m.MonitorIDs, d = types.ListValueFrom(ctx, types.StringType, vals)
+		m.MonitorIDs, d = types.SetValueFrom(ctx, types.StringType, vals)
 		diags.Append(d...)
 	case !m.MonitorIDs.IsNull() && !m.MonitorIDs.IsUnknown() && len(m.MonitorIDs.Elements()) == 0:
-		// Prior was an explicit empty list; keep it.
+		// Prior was an explicit empty set; keep it.
 	default:
-		m.MonitorIDs = types.ListNull(types.StringType)
+		m.MonitorIDs = types.SetNull(types.StringType)
 	}
 
 	// Params — map into the correct nested block based on type.

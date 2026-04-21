@@ -16,7 +16,7 @@ func TestBuildRequestBody_slackWebhook(t *testing.T) {
 		MatchAll:   types.BoolValue(true),
 		Condition:  types.StringNull(),
 		Priorities: priorities,
-		MonitorIDs: types.ListNull(types.StringType),
+		MonitorIDs: types.SetNull(types.StringType),
 		Slack: &slackModel{
 			AuthMethod: types.StringValue("webhook"),
 			WebhookURL: types.StringValue("https://hooks.slack.com/services/T00/B00/XXXX"),
@@ -47,7 +47,7 @@ func TestBuildRequestBody_slackToken(t *testing.T) {
 		MatchAll:   types.BoolValue(true),
 		Condition:  types.StringNull(),
 		Priorities: priorities,
-		MonitorIDs: types.ListNull(types.StringType),
+		MonitorIDs: types.SetNull(types.StringType),
 		Slack: &slackModel{
 			AuthMethod: types.StringValue("token"),
 			WebhookURL: types.StringNull(),
@@ -78,7 +78,7 @@ func TestBuildRequestBody_webhook(t *testing.T) {
 		MatchAll:   types.BoolValue(true),
 		Condition:  types.StringNull(),
 		Priorities: priorities,
-		MonitorIDs: types.ListNull(types.StringType),
+		MonitorIDs: types.SetNull(types.StringType),
 		Webhook: &webhookModel{
 			URL: types.StringValue("https://example.com/hook"),
 		},
@@ -109,7 +109,7 @@ func TestBuildRequestBody_webhookWithPayload(t *testing.T) {
 		MatchAll:   types.BoolValue(true),
 		Condition:  types.StringNull(),
 		Priorities: priorities,
-		MonitorIDs: types.ListNull(types.StringType),
+		MonitorIDs: types.SetNull(types.StringType),
 		Webhook: &webhookModel{
 			URL:     types.StringValue("https://example.com/hook"),
 			Payload: types.StringValue(`{"alert":"uptrace","severity":"high","tags":["prod","api"]}`),
@@ -134,7 +134,7 @@ func TestBuildRequestBody_webhookInvalidPayload(t *testing.T) {
 		MatchAll:   types.BoolValue(true),
 		Condition:  types.StringNull(),
 		Priorities: priorities,
-		MonitorIDs: types.ListNull(types.StringType),
+		MonitorIDs: types.SetNull(types.StringType),
 		Webhook: &webhookModel{
 			URL:     types.StringValue("https://example.com/hook"),
 			Payload: types.StringValue(`{not valid json`),
@@ -149,7 +149,7 @@ func TestBuildRequestBody_webhookInvalidPayload(t *testing.T) {
 
 func TestBuildRequestBody_withMonitorIDs(t *testing.T) {
 	priorities, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"high"})
-	monitorIDs, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"10", "20", "30"})
+	monitorIDs, _ := types.SetValueFrom(context.Background(), types.StringType, []string{"10", "20", "30"})
 	m := &notificationChannelModel{
 		Name:       types.StringValue("test"),
 		Type:       types.StringValue("telegram"),
@@ -164,12 +164,12 @@ func TestBuildRequestBody_withMonitorIDs(t *testing.T) {
 
 	body, diags := buildRequestBody(context.Background(), m)
 	require.False(t, diags.HasError(), "unexpected errors: %v", diags)
-	require.Equal(t, []int64{10, 20, 30}, body.MonitorIds)
+	require.ElementsMatch(t, []int64{10, 20, 30}, body.MonitorIds)
 }
 
 func TestBuildRequestBody_invalidMonitorID(t *testing.T) {
 	priorities, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"high"})
-	monitorIDs, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"abc"})
+	monitorIDs, _ := types.SetValueFrom(context.Background(), types.StringType, []string{"abc"})
 	m := &notificationChannelModel{
 		Name:       types.StringValue("test"),
 		Type:       types.StringValue("telegram"),
@@ -195,7 +195,7 @@ func TestBuildRequestBody_missingParamBlock(t *testing.T) {
 		MatchAll:   types.BoolValue(true),
 		Condition:  types.StringNull(),
 		Priorities: priorities,
-		MonitorIDs: types.ListNull(types.StringType),
+		MonitorIDs: types.SetNull(types.StringType),
 		// Slack block intentionally nil.
 	}
 
@@ -213,7 +213,7 @@ func TestBuildRequestBody_unsupportedType(t *testing.T) {
 		MatchAll:   types.BoolValue(true),
 		Condition:  types.StringNull(),
 		Priorities: priorities,
-		MonitorIDs: types.ListNull(types.StringType),
+		MonitorIDs: types.SetNull(types.StringType),
 	}
 
 	body, diags := buildRequestBody(context.Background(), m)
@@ -230,7 +230,7 @@ func TestBuildRequestBody_conditionSet(t *testing.T) {
 		MatchAll:   types.BoolValue(true),
 		Condition:  types.StringValue("severity >= warning"),
 		Priorities: priorities,
-		MonitorIDs: types.ListNull(types.StringType),
+		MonitorIDs: types.SetNull(types.StringType),
 		Webhook: &webhookModel{
 			URL: types.StringValue("https://example.com"),
 		},

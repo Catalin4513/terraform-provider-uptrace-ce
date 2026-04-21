@@ -208,8 +208,8 @@ func TestChannelToModel_webhookEmptyPayload(t *testing.T) {
 }
 
 func TestChannelToModel_preservesExplicitEmptyMonitorIDs(t *testing.T) {
-	emptyMonitorIDs, d := types.ListValueFrom(context.Background(), types.StringType, []types.String{})
-	require.False(t, d.HasError(), "ListValueFrom returned errors: %v", d)
+	emptyMonitorIDs, d := types.SetValueFrom(context.Background(), types.StringType, []types.String{})
+	require.False(t, d.HasError(), "SetValueFrom returned errors: %v", d)
 	ch := &generated.NotificationChannel{
 		ID:         303,
 		ProjectID:  7,
