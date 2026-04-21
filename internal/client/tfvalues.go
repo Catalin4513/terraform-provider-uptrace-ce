@@ -1,6 +1,13 @@
 package client
 
 import (
+	"context"
+	"fmt"
+	"strconv"
+
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -72,4 +79,84 @@ func PriorInt64[T any](prior *T, get func(*T) types.Int64) types.Int64 {
 		return types.Int64Null()
 	}
 	return get(prior)
+}
+
+// PreferPrior returns prior when set, else fallback. Use when the backend
+// normalizes a user-supplied value and state must keep the user's form.
+func PreferPrior(prior types.String, fallback types.String) types.String {
+	if !prior.IsNull() && !prior.IsUnknown() {
+		return prior
+	}
+	return fallback
+}
+
+// PreserveOptional returns apiValue when userSet, else null. Use for Optional
+// attributes where the backend fills a default the provider must not surface.
+func PreserveOptional[T attr.Value](userSet bool, apiValue T, null T) T {
+	if userSet {
+		return apiValue
+	}
+	return null
+}
+
+// Float32PtrToFloat64 maps *float32 → types.Float64; nil → Null.
+func Float32PtrToFloat64(p *float32) types.Float64 {
+	if p == nil {
+		return types.Float64Null()
+	}
+	return types.Float64Value(float64(*p))
+}
+
+// IntPtrToInt64 maps *int → types.Int64; nil → Null.
+func IntPtrToInt64(p *int) types.Int64 {
+	if p == nil {
+		return types.Int64Null()
+	}
+	return types.Int64Value(int64(*p))
+}
+
+// IntSetFromSlice maps a []int API response to a types.Set of stringified IDs.
+// An explicit empty prior round-trips as empty; otherwise empty API → SetNull.
+func IntSetFromSlice(xs []int, prior types.Set) types.Set {
+	if len(xs) == 0 {
+		if !prior.IsNull() && !prior.IsUnknown() && len(prior.Elements()) == 0 {
+			return prior
+		}
+		return types.SetNull(types.StringType)
+	}
+	vals := make([]attr.Value, len(xs))
+	for i, x := range xs {
+		vals[i] = types.StringValue(strconv.Itoa(x))
+	}
+	s, _ := types.SetValue(types.StringType, vals)
+	return s
+}
+
+// SliceFromIntSet decodes a types.Set of string-encoded IDs into []int.
+// A non-decimal element emits an attribute diagnostic.
+func SliceFromIntSet(ctx context.Context, attrPath path.Path, s types.Set) ([]int, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	if s.IsNull() || s.IsUnknown() {
+		return nil, diags
+	}
+	var vals []types.String
+	diags.Append(s.ElementsAs(ctx, &vals, false)...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	out := make([]int, 0, len(vals))
+	for _, v := range vals {
+		str := v.ValueString()
+		n, err := strconv.Atoi(str)
+		if err != nil {
+			diags.AddAttributeError(
+				attrPath,
+				"invalid ID",
+				fmt.Sprintf("expected a decimal integer, got %q: %s", str, err.Error()),
+			)
+			return nil, diags
+		}
+		out = append(out, n)
+	}
+	return out, diags
 }

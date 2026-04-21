@@ -192,23 +192,65 @@ Type-specific params go in a single nested block named for the `type`:
 | `alertmanager` | `url`, optional `auth_method` (`none`, `basic_auth`, `bearer`), `username`, `password`, `token`. Credential fields required depend on `auth_method`. |
 | `incidentio`   | `url`, `api_key`                                                                                                     |
 
-### uptrace_error_monitor
+### uptrace_monitor
 
-Manages an Uptrace error monitor. Error monitors watch trend-anomalies in a metric-driven MQL query and fire alerts through attached notification channels and/or team email.
+Manages an Uptrace monitor. Set `type` to `error` or `metric` and configure the matching params block.
+
+Shared fields (both types):
 
 | Field                     | Type              | Required | Note                                                                                                |
 |---------------------------|-------------------|----------|-----------------------------------------------------------------------------------------------------|
 | project_id                | string            | yes      | Forces replacement on change.                                                                       |
 | name                      | string            | yes      | Updatable.                                                                                          |
+| type                      | string            | yes      | One of `error`, `metric`. Forces replacement on change.                                             |
 | notify_everyone_by_email  | bool              | no       | Defaults to `false`. Updatable.                                                                     |
 | trend_agg_func            | string            | no       | Defaults to `sum`. One of `sum`, `avg`, `median`, `last`.                                           |
 | trend_sensitivity         | string            | no       | Defaults to `medium`. One of `low`, `medium`, `high`.                                               |
 | team_ids                  | set(string)       | no       | Team IDs to notify when the monitor fires.                                                          |
 | channel_ids               | set(string)       | no       | Notification channel IDs (`uptrace_notification_channel.id`). No `tonumber()` wrapper needed.       |
-| params.query              | string            | yes      | MQL query expression. The backend normalizes MQL; the provider preserves the user's input form.     |
-| params.metrics            | list of objects   | yes      | At least one metric. Each: `{ name = "...", alias = "$..." }`. Aliases must start with `$`.         |
 | id                        | string            | computed |                                                                                                     |
 | status                    | string            | computed | One of `active`, `paused`, `firing`, `no_data`, `disabled`.                                         |
+
+Exactly one of `params_error` / `params_metric` must be set, matching `type`.
+
+`params_error` (required when `type = "error"`):
+
+| Field                     | Type              | Required | Note                                                                                                |
+|---------------------------|-------------------|----------|-----------------------------------------------------------------------------------------------------|
+| query                     | string            | yes      | MQL query expression. The backend normalizes MQL; the provider preserves the user's input form.     |
+| metrics                   | list of objects   | yes      | At least one metric. Each: `{ name = "...", alias = "$..." }`. Aliases must start with `$`.         |
+
+`params_metric` (required when `type = "metric"`):
+
+| Field           | Type            | Required | Note                                                                                               |
+|-----------------|-----------------|----------|----------------------------------------------------------------------------------------------------|
+| query           | string          | yes      | MQL query expression.                                                                              |
+| metrics         | list of objects | yes      | At least one metric. Each: `{ name = "...", alias = "$..." }`.                                     |
+| column          | object          | no       | `{ name = "...", unit = "milliseconds" }`. The result column the detector evaluates.               |
+| resolution      | number          | no       | Evaluation resolution in milliseconds.                                                             |
+| num_eval_points | number          | no       | Number of consecutive evaluation points that must breach the threshold.                            |
+| absent_points   | string          | no       | One of `ignore`, `alert`, `zero`.                                                                  |
+| time_offset     | number          | no       | Time offset in milliseconds applied to the query before evaluation.                                |
+| detector        | object          | yes      | Exactly one of `manual {}` or `auto {}`.                                                           |
+
+`params_metric.detector.manual`:
+
+| Field      | Type   | Required | Note                                                                 |
+|------------|--------|----------|----------------------------------------------------------------------|
+| min_value  | number | no       | Alert when value falls below this threshold.                         |
+| max_value  | number | no       | Alert when value rises above this threshold.                         |
+| recovery   | object | no       | Hysteresis `{ min_value, max_value }` used to clear an active alert. |
+
+`params_metric.detector.auto`:
+
+| Field            | Type   | Required | Note                                               |
+|------------------|--------|----------|----------------------------------------------------|
+| tolerance        | string | no       | One of `low`, `medium`, `high`.                    |
+| training_period  | number | no       | Training period in milliseconds.                   |
+| min_dev_fraction | number | no       | Minimum deviation as a fraction of the baseline.   |
+| min_dev_absolute | number | no       | Minimum absolute deviation from the baseline.      |
+
+Not yet exposed: `repeat_interval` (shared oneOf of `default` / `fixed` / `linear` / `exponential`). Follow-up work.
 
 
 
