@@ -2765,6 +2765,154 @@ func (p ProjectTokenResponse) Validate() error {
 	return errors
 }
 
+// Team A team groups users for project-scoped access control within an organization.
+type Team struct {
+	ID    uint64 `json:"id" validate:"required"`
+	OrgID uint64 `json:"orgId" validate:"required"`
+	Name  string `json:"name" validate:"required"`
+
+	// PermLevel Project-level permission override (empty when unset).
+	PermLevel *PermLevel `json:"permLevel,omitempty" jsonschema:"Project-level permission override (empty when unset)."`
+
+	// CreatedAt Unix timestamp in milliseconds.
+	CreatedAt *float32 `json:"createdAt,omitempty" jsonschema:"Unix timestamp in milliseconds."`
+
+	// NumUser Number of users in the team. Populated only on list responses.
+	NumUser *uint64 `json:"numUser,omitempty" jsonschema:"Number of users in the team. Populated only on list responses."`
+
+	// NumProject Number of projects the team has access to. Populated only on list responses.
+	NumProject *uint64 `json:"numProject,omitempty" jsonschema:"Number of projects the team has access to. Populated only on list responses."`
+}
+
+func (t Team) Validate() error {
+	var errors runtime.ValidationErrors
+	if err := typesValidator.Var(t.ID, "required"); err != nil {
+		errors = errors.Append("ID", err)
+	}
+	if err := typesValidator.Var(t.OrgID, "required"); err != nil {
+		errors = errors.Append("OrgID", err)
+	}
+	if err := typesValidator.Var(t.Name, "required"); err != nil {
+		errors = errors.Append("Name", err)
+	}
+	if t.PermLevel != nil {
+		if v, ok := any(t.PermLevel).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("PermLevel", err)
+			}
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+type TeamResponse struct {
+	// Team A team groups users for project-scoped access control within an organization.
+	Team Team `json:"team" jsonschema:"A team groups users for project-scoped access control within an organization."`
+}
+
+func (t TeamResponse) Validate() error {
+	var errors runtime.ValidationErrors
+	if v, ok := any(t.Team).(runtime.Validator); ok {
+		if err := v.Validate(); err != nil {
+			errors = errors.Append("Team", err)
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+type TeamCreateRequest struct {
+	Name string `json:"name" validate:"required"`
+
+	// PermLevel Project-level permission override (empty when unset).
+	PermLevel *PermLevel `json:"permLevel,omitempty" jsonschema:"Project-level permission override (empty when unset)."`
+}
+
+func (t TeamCreateRequest) Validate() error {
+	var errors runtime.ValidationErrors
+	if err := typesValidator.Var(t.Name, "required"); err != nil {
+		errors = errors.Append("Name", err)
+	}
+	if t.PermLevel != nil {
+		if v, ok := any(t.PermLevel).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("PermLevel", err)
+			}
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+// TeamUpdateRequest Omitting or sending an empty `name` preserves the existing name. Omitting `permLevel` clears it to null.
+type TeamUpdateRequest struct {
+	Name *string `json:"name,omitempty"`
+
+	// PermLevel Project-level permission override (empty when unset).
+	PermLevel *PermLevel `json:"permLevel,omitempty" jsonschema:"Project-level permission override (empty when unset)."`
+}
+
+func (t TeamUpdateRequest) Validate() error {
+	var errors runtime.ValidationErrors
+	if t.PermLevel != nil {
+		if v, ok := any(t.PermLevel).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("PermLevel", err)
+			}
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+// TeamUser A user that belongs to a team.
+type TeamUser struct {
+	// ID User ID.
+	ID    uint64 `json:"id" jsonschema:"User ID." validate:"required"`
+	Name  string `json:"name" validate:"required"`
+	Email string `json:"email" validate:"required"`
+
+	// OrgUserID OrgUser ID. Use this value to add or remove the user via team-user endpoints.
+	OrgUserID uint64 `json:"orgUserId" jsonschema:"OrgUser ID. Use this value to add or remove the user via team-user endpoints." validate:"required"`
+}
+
+func (t TeamUser) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(t))
+}
+
+// TeamProjectAddRequest Request body for adding a project to a team. A non-empty JSON body is required so the server can decode it. The `permLevel` field is accepted but currently ignored by the backend.
+type TeamProjectAddRequest struct {
+	// PermLevel Project-level permission override (empty when unset).
+	PermLevel *PermLevel `json:"permLevel,omitempty" jsonschema:"Project-level permission override (empty when unset)."`
+}
+
+func (t TeamProjectAddRequest) Validate() error {
+	var errors runtime.ValidationErrors
+	if t.PermLevel != nil {
+		if v, ok := any(t.PermLevel).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append("PermLevel", err)
+			}
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+// EmptyResponse Empty JSON object `{}`. Returned by operations that have no resource to return on success.
+type EmptyResponse = map[string]any
+
 type UpdateGridLayoutBody_Items []UpdateGridLayoutBody_Items_Item
 
 func (u UpdateGridLayoutBody_Items) Validate() error {

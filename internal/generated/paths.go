@@ -20,6 +20,10 @@ type TokenID = uint64
 
 type ChannelID = int64
 
+type TeamID = uint64
+
+type OrgUserID = uint64
+
 type GridItemID = int64
 
 type SectionID = int64
@@ -547,6 +551,144 @@ type CreateProjectPath struct {
 
 func (c CreateProjectPath) Validate() error {
 	return runtime.ConvertValidatorError(typesValidator.Struct(c))
+}
+
+type ListTeamsPath struct {
+	// OrgID Organization ID.
+	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
+}
+
+func (l ListTeamsPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(l))
+}
+
+type CreateTeamPath struct {
+	// OrgID Organization ID.
+	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
+}
+
+func (c CreateTeamPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(c))
+}
+
+type GetTeamPath struct {
+	// OrgID Organization ID.
+	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
+
+	// TeamID Team ID.
+	TeamID TeamID `json:"team_id" jsonschema:"Team ID." validate:"required"`
+}
+
+func (g GetTeamPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(g))
+}
+
+type UpdateTeamPath struct {
+	// OrgID Organization ID.
+	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
+
+	// TeamID Team ID.
+	TeamID TeamID `json:"team_id" jsonschema:"Team ID." validate:"required"`
+}
+
+func (u UpdateTeamPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(u))
+}
+
+type DeleteTeamPath struct {
+	// OrgID Organization ID.
+	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
+
+	// TeamID Team ID.
+	TeamID TeamID `json:"team_id" jsonschema:"Team ID." validate:"required"`
+}
+
+func (d DeleteTeamPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(d))
+}
+
+type ListTeamProjectsPath struct {
+	// OrgID Organization ID.
+	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
+
+	// TeamID Team ID.
+	TeamID TeamID `json:"team_id" jsonschema:"Team ID." validate:"required"`
+}
+
+func (l ListTeamProjectsPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(l))
+}
+
+type AddTeamProjectPath struct {
+	// OrgID Organization ID.
+	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
+
+	// TeamID Team ID.
+	TeamID TeamID `json:"team_id" jsonschema:"Team ID." validate:"required"`
+
+	// ProjectID Uptrace project ID.
+	ProjectID ProjectID `json:"project_id" jsonschema:"Uptrace project ID." validate:"required"`
+}
+
+func (a AddTeamProjectPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(a))
+}
+
+type RemoveTeamProjectPath struct {
+	// OrgID Organization ID.
+	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
+
+	// TeamID Team ID.
+	TeamID TeamID `json:"team_id" jsonschema:"Team ID." validate:"required"`
+
+	// ProjectID Uptrace project ID.
+	ProjectID ProjectID `json:"project_id" jsonschema:"Uptrace project ID." validate:"required"`
+}
+
+func (r RemoveTeamProjectPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(r))
+}
+
+type ListTeamUsersPath struct {
+	// OrgID Organization ID.
+	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
+
+	// TeamID Team ID.
+	TeamID TeamID `json:"team_id" jsonschema:"Team ID." validate:"required"`
+}
+
+func (l ListTeamUsersPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(l))
+}
+
+type AddTeamUserPath struct {
+	// OrgID Organization ID.
+	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
+
+	// TeamID Team ID.
+	TeamID TeamID `json:"team_id" jsonschema:"Team ID." validate:"required"`
+
+	// OrgUserID Organization user ID.
+	OrgUserID OrgUserID `json:"org_user_id" jsonschema:"Organization user ID." validate:"required"`
+}
+
+func (a AddTeamUserPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(a))
+}
+
+type RemoveTeamUserPath struct {
+	// OrgID Organization ID.
+	OrgID OrgID `json:"org_id" jsonschema:"Organization ID." validate:"required"`
+
+	// TeamID Team ID.
+	TeamID TeamID `json:"team_id" jsonschema:"Team ID." validate:"required"`
+
+	// OrgUserID Organization user ID.
+	OrgUserID OrgUserID `json:"org_user_id" jsonschema:"Organization user ID." validate:"required"`
+}
+
+func (r RemoveTeamUserPath) Validate() error {
+	return runtime.ConvertValidatorError(typesValidator.Struct(r))
 }
 
 type GetProjectPath struct {

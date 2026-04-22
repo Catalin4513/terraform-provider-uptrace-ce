@@ -968,3 +968,23 @@ func (n NotificationChannelRequestPriorities) Validate() error {
 		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid NotificationChannelRequestPriorities value, got: %v", n))
 	}
 }
+
+// PermLevel Project-level permission override (empty when unset).
+type PermLevel string
+
+const (
+	Edit           PermLevel = "edit"
+	PermLevelAdmin PermLevel = "admin"
+	PermLevelNone  PermLevel = "none"
+	PermLevelView  PermLevel = "view"
+)
+
+// Validate checks if the PermLevel value is valid
+func (p PermLevel) Validate() error {
+	switch p {
+	case Edit, PermLevelAdmin, PermLevelNone, PermLevelView:
+		return nil
+	default:
+		return runtime.NewValidationErrorsFromString("Enum", fmt.Sprintf("must be a valid PermLevel value, got: %v", p))
+	}
+}

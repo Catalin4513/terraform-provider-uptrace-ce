@@ -323,6 +323,60 @@ type CreateProjectResponse = ProjectResponse
 
 type CreateProjectErrorResponse = BadRequest
 
+type ListTeamsResponse struct {
+	Teams []Team `json:"teams" validate:"required"`
+}
+
+type ListTeamsErrorResponse = Unauthorized
+
+type CreateTeamResponse = TeamResponse
+
+type CreateTeamErrorResponse = BadRequest
+
+type GetTeamResponse = TeamResponse
+
+type GetTeamErrorResponse = Unauthorized
+
+type UpdateTeamResponse = TeamResponse
+
+type UpdateTeamErrorResponse = BadRequest
+
+type DeleteTeamResponse = TeamResponse
+
+type DeleteTeamErrorResponse = Unauthorized
+
+type ListTeamProjectsResponse struct {
+	Projects []Project `json:"projects" validate:"required"`
+}
+
+type ListTeamProjectsErrorResponse = Unauthorized
+
+// AddTeamProjectResponse Empty JSON object `{}`. Returned by operations that have no resource to return on success.
+type AddTeamProjectResponse = EmptyResponse
+
+type AddTeamProjectErrorResponse = BadRequest
+
+// RemoveTeamProjectResponse Empty JSON object `{}`. Returned by operations that have no resource to return on success.
+type RemoveTeamProjectResponse = EmptyResponse
+
+type RemoveTeamProjectErrorResponse = Unauthorized
+
+type ListTeamUsersResponse struct {
+	Users []TeamUser `json:"users" validate:"required"`
+}
+
+type ListTeamUsersErrorResponse = Unauthorized
+
+// AddTeamUserResponse Empty JSON object `{}`. Returned by operations that have no resource to return on success.
+type AddTeamUserResponse = EmptyResponse
+
+type AddTeamUserErrorResponse = Unauthorized
+
+// RemoveTeamUserResponse Empty JSON object `{}`. Returned by operations that have no resource to return on success.
+type RemoveTeamUserResponse = EmptyResponse
+
+type RemoveTeamUserErrorResponse = Unauthorized
+
 type GetProjectResponse = ProjectResponse
 
 type GetProjectErrorResponse = Unauthorized

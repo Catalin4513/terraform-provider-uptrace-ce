@@ -8,6 +8,7 @@ import (
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/services/notifchan"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/services/org"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/services/project"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/services/team"
 )
 
 // ServiceRegistration is implemented by every service package under
@@ -23,4 +24,5 @@ var services = []ServiceRegistration{
 	notifchan.Registration{},
 	org.Registration{},
 	project.Registration{},
+	team.Registration{},
 }
