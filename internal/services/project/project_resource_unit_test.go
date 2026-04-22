@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
 	str2duration "github.com/xhit/go-str2duration/v2"
 
-	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
 
@@ -22,6 +22,38 @@ func durationMs(t *testing.T, s string) float64 {
 	d, err := str2duration.ParseDuration(s)
 	require.NoError(t, err)
 	return float64(d.Milliseconds())
+}
+
+func projectResourceTestSchema(t *testing.T) resource.SchemaResponse {
+	t.Helper()
+
+	var resp resource.SchemaResponse
+	(&ProjectResource{}).Schema(context.Background(), resource.SchemaRequest{}, &resp)
+	require.False(t, resp.Diagnostics.HasError())
+
+	return resp
+}
+
+func projectResourceTestState(t *testing.T, m projectModel) tfsdk.State {
+	t.Helper()
+
+	schemaResp := projectResourceTestSchema(t)
+	state := tfsdk.State{Schema: schemaResp.Schema}
+	diags := state.Set(context.Background(), &m)
+	require.False(t, diags.HasError())
+
+	return state
+}
+
+func projectResourceTestPlan(t *testing.T, m projectModel) tfsdk.Plan {
+	t.Helper()
+
+	schemaResp := projectResourceTestSchema(t)
+	plan := tfsdk.Plan{Schema: schemaResp.Schema}
+	diags := plan.Set(context.Background(), &m)
+	require.False(t, diags.HasError())
+
+	return plan
 }
 
 func TestProjectToModel_fullPayload(t *testing.T) {
@@ -132,17 +164,6 @@ func TestProjectRequestBody_semconvEnumIsPassedThrough(t *testing.T) {
 	require.Equal(t, generated.ProjectCreateRequestSemconvVersionV1250, *body.SemconvVersion)
 }
 
-func TestParseProjectID_valid(t *testing.T) {
-	id, err := client.ParseProjectID("123")
-	require.NoError(t, err)
-	require.Equal(t, uint32(123), id)
-}
-
-func TestParseProjectID_invalid(t *testing.T) {
-	_, err := client.ParseProjectID("abc")
-	require.Error(t, err)
-}
-
 func TestProjectImportState_rejectsInvalidOrgID(t *testing.T) {
 	var resp resource.ImportStateResponse
 
@@ -150,4 +171,57 @@ func TestProjectImportState_rejectsInvalidOrgID(t *testing.T) {
 
 	require.True(t, resp.Diagnostics.HasError())
 	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid org_id in import ID")
+}
+
+func TestProjectRead_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	reqState := projectResourceTestState(t, projectModel{
+		ID:    types.StringValue("4294967296"),
+		OrgID: types.StringValue("42"),
+		Name:  types.StringValue("api"),
+	})
+	req := resource.ReadRequest{State: reqState}
+	resp := resource.ReadResponse{State: reqState}
+
+	(&ProjectResource{}).Read(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project ID")
+}
+
+func TestProjectUpdate_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	reqState := projectResourceTestState(t, projectModel{
+		ID:    types.StringValue("4294967296"),
+		OrgID: types.StringValue("42"),
+		Name:  types.StringValue("api"),
+	})
+	reqPlan := projectResourceTestPlan(t, projectModel{
+		ID:    types.StringValue("4294967296"),
+		OrgID: types.StringValue("42"),
+		Name:  types.StringValue("api"),
+	})
+	req := resource.UpdateRequest{State: reqState, Plan: reqPlan}
+	resp := resource.UpdateResponse{State: reqState}
+
+	(&ProjectResource{}).Update(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project ID")
+}
+
+func TestProjectDelete_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	reqState := projectResourceTestState(t, projectModel{
+		ID:    types.StringValue("4294967296"),
+		OrgID: types.StringValue("42"),
+		Name:  types.StringValue("api"),
+	})
+	req := resource.DeleteRequest{State: reqState}
+	resp := resource.DeleteResponse{State: reqState}
+
+	(&ProjectResource{}).Delete(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project ID")
 }

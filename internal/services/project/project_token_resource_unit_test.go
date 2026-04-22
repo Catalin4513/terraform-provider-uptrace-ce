@@ -5,12 +5,45 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/oapi-codegen-dd/v3/pkg/runtime"
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
+
+func projectTokenResourceTestSchema(t *testing.T) resource.SchemaResponse {
+	t.Helper()
+
+	var resp resource.SchemaResponse
+	(&ProjectTokenResource{}).Schema(context.Background(), resource.SchemaRequest{}, &resp)
+	require.False(t, resp.Diagnostics.HasError())
+
+	return resp
+}
+
+func projectTokenResourceTestState(t *testing.T, m projectTokenModel) tfsdk.State {
+	t.Helper()
+
+	schemaResp := projectTokenResourceTestSchema(t)
+	state := tfsdk.State{Schema: schemaResp.Schema}
+	diags := state.Set(context.Background(), &m)
+	require.False(t, diags.HasError())
+
+	return state
+}
+
+func projectTokenResourceTestPlan(t *testing.T, m projectTokenModel) tfsdk.Plan {
+	t.Helper()
+
+	schemaResp := projectTokenResourceTestSchema(t)
+	plan := tfsdk.Plan{Schema: schemaResp.Schema}
+	diags := plan.Set(context.Background(), &m)
+	require.False(t, diags.HasError())
+
+	return plan
+}
 
 func TestProjectTokenToModel_fullPayload(t *testing.T) {
 	token := &generated.ProjectToken{
@@ -83,4 +116,75 @@ func TestProjectTokenImportState_rejectsInvalidTokenID(t *testing.T) {
 
 	require.True(t, resp.Diagnostics.HasError())
 	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid token_id in import ID")
+}
+
+func TestProjectTokenCreate_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	reqPlan := projectTokenResourceTestPlan(t, projectTokenModel{
+		ProjectID: types.StringValue("4294967296"),
+		Name:      types.StringValue("ci-ingest"),
+	})
+	req := resource.CreateRequest{Plan: reqPlan}
+	resp := resource.CreateResponse{}
+
+	(&ProjectTokenResource{}).Create(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project_id")
+}
+
+func TestProjectTokenRead_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	reqState := projectTokenResourceTestState(t, projectTokenModel{
+		ID:        types.StringValue("1"),
+		ProjectID: types.StringValue("4294967296"),
+		Name:      types.StringValue("ci-ingest"),
+		Token:     types.StringValue("secret"),
+		DSN:       types.StringValue("http://secret@localhost:14318/1"),
+	})
+	req := resource.ReadRequest{State: reqState}
+	resp := resource.ReadResponse{State: reqState}
+
+	(&ProjectTokenResource{}).Read(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project_id")
+}
+
+func TestProjectTokenUpdate_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	model := projectTokenModel{
+		ID:        types.StringValue("1"),
+		ProjectID: types.StringValue("4294967296"),
+		Name:      types.StringValue("ci-ingest"),
+		Token:     types.StringValue("secret"),
+		DSN:       types.StringValue("http://secret@localhost:14318/1"),
+	}
+	reqState := projectTokenResourceTestState(t, model)
+	reqPlan := projectTokenResourceTestPlan(t, model)
+	req := resource.UpdateRequest{State: reqState, Plan: reqPlan}
+	resp := resource.UpdateResponse{State: reqState}
+
+	(&ProjectTokenResource{}).Update(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project_id")
+}
+
+func TestProjectTokenDelete_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	reqState := projectTokenResourceTestState(t, projectTokenModel{
+		ID:        types.StringValue("1"),
+		ProjectID: types.StringValue("4294967296"),
+		Name:      types.StringValue("ci-ingest"),
+		Token:     types.StringValue("secret"),
+		DSN:       types.StringValue("http://secret@localhost:14318/1"),
+	})
+	req := resource.DeleteRequest{State: reqState}
+	resp := resource.DeleteResponse{State: reqState}
+
+	(&ProjectTokenResource{}).Delete(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project_id")
 }

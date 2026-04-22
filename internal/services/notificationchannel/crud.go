@@ -27,11 +27,12 @@ type channelCRUD[M any] struct {
 func channelCreate[M any](ctx context.Context, c *client.Client, plan *M, h channelCRUD[M]) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	projectID, err := client.ParseProjectID(h.ProjectID(plan).ValueString())
+	projectID64, err := strconv.ParseUint(h.ProjectID(plan).ValueString(), 10, 32)
 	if err != nil {
 		diags.AddError("invalid project_id", err.Error())
 		return diags
 	}
+	projectID := uint32(projectID64)
 
 	body, d := h.Build(ctx, plan)
 	diags.Append(d...)
@@ -60,11 +61,12 @@ func channelCreate[M any](ctx context.Context, c *client.Client, plan *M, h chan
 // channelRead returns removeResource=true when the backend reports the
 // resource is gone (404 / 403). The caller should remove it from state.
 func channelRead[M any](ctx context.Context, c *client.Client, state *M, h channelCRUD[M]) (removeResource bool, diags diag.Diagnostics) {
-	projectID, err := client.ParseProjectID(h.ProjectID(state).ValueString())
+	projectID64, err := strconv.ParseUint(h.ProjectID(state).ValueString(), 10, 32)
 	if err != nil {
 		diags.AddError("invalid project_id", err.Error())
 		return false, diags
 	}
+	projectID := uint32(projectID64)
 	channelID, err := strconv.ParseInt(h.ID(state).ValueString(), 10, 64)
 	if err != nil {
 		diags.AddError("invalid channel ID", err.Error())
@@ -89,11 +91,12 @@ func channelRead[M any](ctx context.Context, c *client.Client, state *M, h chann
 func channelUpdate[M any](ctx context.Context, c *client.Client, plan *M, h channelCRUD[M]) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	projectID, err := client.ParseProjectID(h.ProjectID(plan).ValueString())
+	projectID64, err := strconv.ParseUint(h.ProjectID(plan).ValueString(), 10, 32)
 	if err != nil {
 		diags.AddError("invalid project_id", err.Error())
 		return diags
 	}
+	projectID := uint32(projectID64)
 	channelID, err := strconv.ParseInt(h.ID(plan).ValueString(), 10, 64)
 	if err != nil {
 		diags.AddError("invalid channel ID", err.Error())
@@ -124,11 +127,12 @@ func channelUpdate[M any](ctx context.Context, c *client.Client, plan *M, h chan
 func channelDelete[M any](ctx context.Context, c *client.Client, state *M, h channelCRUD[M]) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	projectID, err := client.ParseProjectID(h.ProjectID(state).ValueString())
+	projectID64, err := strconv.ParseUint(h.ProjectID(state).ValueString(), 10, 32)
 	if err != nil {
 		diags.AddError("invalid project_id", err.Error())
 		return diags
 	}
+	projectID := uint32(projectID64)
 	channelID, err := strconv.ParseInt(h.ID(state).ValueString(), 10, 64)
 	if err != nil {
 		diags.AddError("invalid channel ID", err.Error())

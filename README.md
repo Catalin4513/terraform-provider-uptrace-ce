@@ -68,8 +68,7 @@ Unit tests run without any external dependencies and are always safe to run:
 make test
 ```
 
-These test pure helper functions (`orgToModel`, `parseOrgID`) and run in CI
-on every push and pull request.
+These cover pure mapping and request-building helpers plus import and ID-validation paths, and run in CI on every push and pull request.
 
 ### Acceptance tests
 

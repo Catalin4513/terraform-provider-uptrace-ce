@@ -183,11 +183,12 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	projectID, err := client.ParseProjectID(state.ID.ValueString())
+	projectID64, err := strconv.ParseUint(state.ID.ValueString(), 10, 32)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project ID", err.Error())
 		return
 	}
+	projectID := uint32(projectID64)
 
 	out, err := r.client.API.GetProject(ctx, &generated.GetProjectRequestOptions{
 		PathParams: &generated.GetProjectPath{ProjectID: projectID},
@@ -222,11 +223,12 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	projectID, err := client.ParseProjectID(plan.ID.ValueString())
+	projectID64, err := strconv.ParseUint(plan.ID.ValueString(), 10, 32)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project ID", err.Error())
 		return
 	}
+	projectID := uint32(projectID64)
 
 	tflog.Info(ctx, "updating project", map[string]any{"id": plan.ID.ValueString()})
 
@@ -259,11 +261,12 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	projectID, err := client.ParseProjectID(state.ID.ValueString())
+	projectID64, err := strconv.ParseUint(state.ID.ValueString(), 10, 32)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project ID", err.Error())
 		return
 	}
+	projectID := uint32(projectID64)
 
 	tflog.Info(ctx, "deleting project", map[string]any{"id": state.ID.ValueString()})
 

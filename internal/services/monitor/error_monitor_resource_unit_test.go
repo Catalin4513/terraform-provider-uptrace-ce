@@ -4,11 +4,65 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
+
+func errorMonitorResourceTestSchema(t *testing.T) resource.SchemaResponse {
+	t.Helper()
+
+	var resp resource.SchemaResponse
+	(&ErrorMonitorResource{}).Schema(context.Background(), resource.SchemaRequest{}, &resp)
+	require.False(t, resp.Diagnostics.HasError())
+
+	return resp
+}
+
+func errorMonitorResourceTestState(t *testing.T, m errorMonitorModel) tfsdk.State {
+	t.Helper()
+
+	schemaResp := errorMonitorResourceTestSchema(t)
+	state := tfsdk.State{Schema: schemaResp.Schema}
+	diags := state.Set(context.Background(), &m)
+	require.False(t, diags.HasError())
+
+	return state
+}
+
+func errorMonitorResourceTestPlan(t *testing.T, m errorMonitorModel) tfsdk.Plan {
+	t.Helper()
+
+	schemaResp := errorMonitorResourceTestSchema(t)
+	plan := tfsdk.Plan{Schema: schemaResp.Schema}
+	diags := plan.Set(context.Background(), &m)
+	require.False(t, diags.HasError())
+
+	return plan
+}
+
+func validErrorMonitorModel(projectID string, monitorID types.String) errorMonitorModel {
+	return errorMonitorModel{
+		ID:                    monitorID,
+		ProjectID:             types.StringValue(projectID),
+		Name:                  types.StringValue("err-monitor"),
+		NotifyEveryoneByEmail: types.BoolValue(false),
+		TrendAggFunc:          types.StringValue("sum"),
+		TrendSensitivity:      types.StringValue("medium"),
+		TeamIDs:               types.SetNull(types.StringType),
+		ChannelIDs:            types.SetNull(types.StringType),
+		Status:                types.StringNull(),
+		Params: &errorParamsModel{
+			Metrics: []monitorMetricModel{
+				{Name: types.StringValue("uptrace_tracing_logs"), Alias: types.StringValue("$logs")},
+			},
+			Query: types.StringValue("sum($logs) | where true"),
+		},
+	}
+}
 
 func TestBuildErrorMonitorRequest_minimal(t *testing.T) {
 	m := &errorMonitorModel{
@@ -157,4 +211,54 @@ func TestApplyErrorMonitor_rejectsTypeMismatch(t *testing.T) {
 
 	diags := applyErrorMonitorToModel(mon, dst)
 	require.True(t, diags.HasError(), "expected error when API type does not match resource type")
+}
+
+func TestErrorMonitorCreate_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	reqPlan := errorMonitorResourceTestPlan(t, validErrorMonitorModel("4294967296", types.StringNull()))
+	req := resource.CreateRequest{Plan: reqPlan}
+	resp := resource.CreateResponse{}
+
+	(&ErrorMonitorResource{}).Create(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project_id")
+}
+
+func TestErrorMonitorRead_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	reqState := errorMonitorResourceTestState(t, validErrorMonitorModel("4294967296", types.StringValue("1")))
+	req := resource.ReadRequest{State: reqState}
+	resp := resource.ReadResponse{State: reqState}
+
+	(&ErrorMonitorResource{}).Read(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project_id")
+}
+
+func TestErrorMonitorUpdate_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	model := validErrorMonitorModel("4294967296", types.StringValue("1"))
+	reqState := errorMonitorResourceTestState(t, model)
+	reqPlan := errorMonitorResourceTestPlan(t, model)
+	req := resource.UpdateRequest{State: reqState, Plan: reqPlan}
+	resp := resource.UpdateResponse{State: reqState}
+
+	(&ErrorMonitorResource{}).Update(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project_id")
+}
+
+func TestErrorMonitorDelete_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	reqState := errorMonitorResourceTestState(t, validErrorMonitorModel("4294967296", types.StringValue("1")))
+	req := resource.DeleteRequest{State: reqState}
+	resp := resource.DeleteResponse{State: reqState}
+
+	(&ErrorMonitorResource{}).Delete(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project_id")
 }

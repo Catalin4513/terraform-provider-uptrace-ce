@@ -5,11 +5,68 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
+
+func metricMonitorResourceTestSchema(t *testing.T) resource.SchemaResponse {
+	t.Helper()
+
+	var resp resource.SchemaResponse
+	(&MetricMonitorResource{}).Schema(context.Background(), resource.SchemaRequest{}, &resp)
+	require.False(t, resp.Diagnostics.HasError())
+
+	return resp
+}
+
+func metricMonitorResourceTestState(t *testing.T, m metricMonitorModel) tfsdk.State {
+	t.Helper()
+
+	schemaResp := metricMonitorResourceTestSchema(t)
+	state := tfsdk.State{Schema: schemaResp.Schema}
+	diags := state.Set(context.Background(), &m)
+	require.False(t, diags.HasError())
+
+	return state
+}
+
+func metricMonitorResourceTestPlan(t *testing.T, m metricMonitorModel) tfsdk.Plan {
+	t.Helper()
+
+	schemaResp := metricMonitorResourceTestSchema(t)
+	plan := tfsdk.Plan{Schema: schemaResp.Schema}
+	diags := plan.Set(context.Background(), &m)
+	require.False(t, diags.HasError())
+
+	return plan
+}
+
+func validMetricMonitorModel(projectID string, monitorID types.String) metricMonitorModel {
+	return metricMonitorModel{
+		ID:                    monitorID,
+		ProjectID:             types.StringValue(projectID),
+		Name:                  types.StringValue("latency"),
+		NotifyEveryoneByEmail: types.BoolValue(false),
+		TrendAggFunc:          types.StringValue("avg"),
+		TrendSensitivity:      types.StringValue("medium"),
+		TeamIDs:               types.SetNull(types.StringType),
+		ChannelIDs:            types.SetNull(types.StringType),
+		Status:                types.StringNull(),
+		Params: &metricParamsModel{
+			Metrics: []monitorMetricModel{
+				{Name: types.StringValue("http_server_duration"), Alias: types.StringValue("$http_server")},
+			},
+			Query: types.StringValue("avg($http_server)"),
+			Detector: &detectorModel{
+				Auto: &autoDetectorModel{},
+			},
+		},
+	}
+}
 
 func TestBuildMetricMonitorRequest_autoDetector(t *testing.T) {
 	m := &metricMonitorModel{
@@ -348,4 +405,54 @@ func TestValidateDetector(t *testing.T) {
 		validateDetector(m, &diags)
 		require.False(t, diags.HasError())
 	})
+}
+
+func TestMetricMonitorCreate_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	reqPlan := metricMonitorResourceTestPlan(t, validMetricMonitorModel("4294967296", types.StringNull()))
+	req := resource.CreateRequest{Plan: reqPlan}
+	resp := resource.CreateResponse{}
+
+	(&MetricMonitorResource{}).Create(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project_id")
+}
+
+func TestMetricMonitorRead_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	reqState := metricMonitorResourceTestState(t, validMetricMonitorModel("4294967296", types.StringValue("1")))
+	req := resource.ReadRequest{State: reqState}
+	resp := resource.ReadResponse{State: reqState}
+
+	(&MetricMonitorResource{}).Read(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project_id")
+}
+
+func TestMetricMonitorUpdate_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	model := validMetricMonitorModel("4294967296", types.StringValue("1"))
+	reqState := metricMonitorResourceTestState(t, model)
+	reqPlan := metricMonitorResourceTestPlan(t, model)
+	req := resource.UpdateRequest{State: reqState, Plan: reqPlan}
+	resp := resource.UpdateResponse{State: reqState}
+
+	(&MetricMonitorResource{}).Update(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project_id")
+}
+
+func TestMetricMonitorDelete_rejectsProjectIDOutsideUint32(t *testing.T) {
+	ctx := context.Background()
+	reqState := metricMonitorResourceTestState(t, validMetricMonitorModel("4294967296", types.StringValue("1")))
+	req := resource.DeleteRequest{State: reqState}
+	resp := resource.DeleteResponse{State: reqState}
+
+	(&MetricMonitorResource{}).Delete(ctx, req, &resp)
+
+	require.True(t, resp.Diagnostics.HasError())
+	require.Contains(t, resp.Diagnostics.Errors()[0].Summary(), "invalid project_id")
 }
