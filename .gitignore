@@ -11,3 +11,4 @@ terraform.rc
 vendor/
 .env
 !.env.example
+.worktrees/
