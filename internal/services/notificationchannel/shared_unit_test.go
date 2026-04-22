@@ -11,6 +11,12 @@ import (
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
 )
 
+type testChannelModel struct {
+	projectID types.String
+	id        types.String
+	name      types.String
+}
+
 // --- applyShared ---
 
 func TestApplyShared_monitorIDsExplicitEmptyPreserved(t *testing.T) {
@@ -176,4 +182,73 @@ func TestRejectChannelType_match(t *testing.T) {
 	var diags diag.Diagnostics
 	rejectChannelType(generated.Slack, ch, &diags)
 	require.False(t, diags.HasError())
+}
+
+func testChannelCRUD(t *testing.T) channelCRUD[testChannelModel] {
+	t.Helper()
+
+	return channelCRUD[testChannelModel]{
+		TypeName: "test_channel",
+		ProjectID: func(m *testChannelModel) types.String {
+			return m.projectID
+		},
+		ID: func(m *testChannelModel) types.String {
+			return m.id
+		},
+		Name: func(m *testChannelModel) types.String {
+			return m.name
+		},
+		Build: func(context.Context, *testChannelModel) (*generated.NotificationChannelRequest, diag.Diagnostics) {
+			t.Fatalf("Build should not be called when project_id parsing fails")
+			return nil, nil
+		},
+		Apply: func(context.Context, *generated.NotificationChannel, *testChannelModel) diag.Diagnostics {
+			t.Fatalf("Apply should not be called when project_id parsing fails")
+			return nil
+		},
+	}
+}
+
+func TestChannelCreate_rejectsProjectIDOutsideUint32(t *testing.T) {
+	diags := channelCreate(context.Background(), nil, &testChannelModel{
+		projectID: types.StringValue("4294967296"),
+		name:      types.StringValue("test"),
+	}, testChannelCRUD(t))
+
+	require.True(t, diags.HasError())
+	require.Contains(t, diags.Errors()[0].Summary(), "invalid project_id")
+}
+
+func TestChannelRead_rejectsProjectIDOutsideUint32(t *testing.T) {
+	removeResource, diags := channelRead(context.Background(), nil, &testChannelModel{
+		projectID: types.StringValue("4294967296"),
+		id:        types.StringValue("1"),
+		name:      types.StringValue("test"),
+	}, testChannelCRUD(t))
+
+	require.False(t, removeResource)
+	require.True(t, diags.HasError())
+	require.Contains(t, diags.Errors()[0].Summary(), "invalid project_id")
+}
+
+func TestChannelUpdate_rejectsProjectIDOutsideUint32(t *testing.T) {
+	diags := channelUpdate(context.Background(), nil, &testChannelModel{
+		projectID: types.StringValue("4294967296"),
+		id:        types.StringValue("1"),
+		name:      types.StringValue("test"),
+	}, testChannelCRUD(t))
+
+	require.True(t, diags.HasError())
+	require.Contains(t, diags.Errors()[0].Summary(), "invalid project_id")
+}
+
+func TestChannelDelete_rejectsProjectIDOutsideUint32(t *testing.T) {
+	diags := channelDelete(context.Background(), nil, &testChannelModel{
+		projectID: types.StringValue("4294967296"),
+		id:        types.StringValue("1"),
+		name:      types.StringValue("test"),
+	}, testChannelCRUD(t))
+
+	require.True(t, diags.HasError())
+	require.Contains(t, diags.Errors()[0].Summary(), "invalid project_id")
 }
