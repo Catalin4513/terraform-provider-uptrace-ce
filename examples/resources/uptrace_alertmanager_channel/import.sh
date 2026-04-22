@@ -1,0 +1,1 @@
+terraform import uptrace_alertmanager_channel.basic_auth 1:42

@@ -99,15 +99,11 @@ resource "uptrace_project" "test" {
   name   = %q
 }
 
-resource "uptrace_notification_channel" "test" {
+resource "uptrace_webhook_channel" "test" {
   project_id = uptrace_project.test.id
   name       = "acc-em-chan-webhook"
-  type       = "webhook"
   priorities = ["high"]
-
-  webhook {
-    url = %q
-  }
+  url        = %q
 
   lifecycle {
     ignore_changes = [monitor_ids]
@@ -142,12 +138,12 @@ func TestAccErrorMonitor_channelIDsClearOnRemove(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccErrorMonitorConfigWithChannels(orgName, projectName, "acc-em-chan-clear", webhookURL,
-					"[uptrace_notification_channel.test.id]"),
+					"[uptrace_webhook_channel.test.id]"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("uptrace_error_monitor.test", "channel_ids.#", "1"),
 					resource.TestCheckTypeSetElemAttrPair(
 						"uptrace_error_monitor.test", "channel_ids.*",
-						"uptrace_notification_channel.test", "id",
+						"uptrace_webhook_channel.test", "id",
 					),
 				),
 			},

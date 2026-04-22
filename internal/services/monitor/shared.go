@@ -81,7 +81,7 @@ func sharedAttributes() map[string]schema.Attribute {
 		"channel_ids": schema.SetAttribute{
 			Optional:    true,
 			ElementType: types.StringType,
-			Description: "Notification channel IDs (uptrace_notification_channel.id). Removing this attribute clears the association server-side.",
+			Description: "Notification channel IDs from typed channel resources such as uptrace_webhook_channel.id. Removing this attribute clears the association server-side.",
 		},
 		"status": schema.StringAttribute{
 			Computed:    true,

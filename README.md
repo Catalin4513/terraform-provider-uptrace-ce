@@ -68,8 +68,7 @@ Unit tests run without any external dependencies and are always safe to run:
 make test
 ```
 
-These test pure helper functions (`orgToModel`, `parseOrgID`) and run in CI
-on every push and pull request.
+These cover pure mapping and request-building helpers plus import and ID-validation paths, and run in CI on every push and pull request.
 
 ### Acceptance tests
 
@@ -159,38 +158,41 @@ Manages an ingest token for an Uptrace project.
 
 Import with `<project_id>:<token_id>`.
 
-### uptrace_notification_channel
+### Notification channels
 
-Manages an Uptrace notification channel. Exactly one param block must be configured, and it must match `type` — the provider rejects missing or extra blocks at plan time.
+Each notification-channel type is its own resource. All resources share the same top-level fields; the type-specific fields differ per resource.
 
-| Field       | Type         | Required | Note                                                                                |
-|-------------|--------------|----------|-------------------------------------------------------------------------------------|
-| project_id  | string       | yes      | Forces replacement on change.                                                        |
-| name        | string       | yes      | Updatable.                                                                           |
-| type        | string       | yes      | Forces replacement. One of: `slack`, `google_chat`, `mattermost`, `pagerduty`, `servicenow`, `opsgenie`, `telegram`, `teams`, `pushover`, `webhook`, `alertmanager`, `incidentio`. |
-| priorities  | list(string) | yes      | Alert priorities to match. Each value one of `info`, `low`, `medium`, `high`.        |
-| match_all   | bool         | no       | Defaults to `true`. When `false`, `monitor_ids` must be set and non-empty.           |
-| monitor_ids | list(string) | no       | Required when `match_all = false`.                                                   |
-| condition   | string       | no       | Alert condition expression.                                                          |
-| id          | string       | computed |                                                                                      |
-| status      | string       | computed | One of `delivering`, `paused`, `disabled`, `draft`.                                  |
+Shared fields (all 12 resources):
 
-Type-specific params go in a single nested block named for the `type`:
+| Field       | Type         | Required | Note                                                                         |
+|-------------|--------------|----------|------------------------------------------------------------------------------|
+| project_id  | string       | yes      | Forces replacement on change.                                                |
+| name        | string       | yes      | Updatable.                                                                   |
+| priorities  | list(string) | yes      | Alert priorities to match. Each one of `info`, `low`, `medium`, `high`.      |
+| match_all   | bool         | no       | Defaults to `true`. When `false`, `monitor_ids` must be set and non-empty.   |
+| monitor_ids | list(string) | no       | Required when `match_all = false`.                                           |
+| condition   | string       | no       | Alert condition expression.                                                  |
+| id          | string       | computed |                                                                              |
+| status      | string       | computed | One of `delivering`, `paused`, `disabled`, `draft`.                          |
 
-| Block          | Fields                                                                                                               |
-|----------------|----------------------------------------------------------------------------------------------------------------------|
-| `slack`        | `auth_method` (`webhook` or `token`), `webhook_url`, `token`, `channel`. Fields required depend on `auth_method`.    |
-| `google_chat`  | `webhook_url`                                                                                                        |
-| `mattermost`   | `webhook_url`                                                                                                        |
-| `pagerduty`    | `routing_key`, `severity` (`critical`, `error`, `warning`, `info`)                                                   |
-| `servicenow`   | `url`, `username`, `password`, plus optional `category`, `subcategory`, `impact`, `urgency`, `severity`, `caller_id`, `group`, `assigned_to`, `opened_by`, `notify`, `due_date` |
-| `opsgenie`     | `api_key`, `priority`                                                                                                |
-| `telegram`     | `chat_id` (int64)                                                                                                    |
-| `teams`        | `webhook_url`                                                                                                        |
-| `pushover`     | `token`, `user_key`, optional `priority` (int, -2 to 2), `sound`                                                     |
-| `webhook`      | `url`, optional `payload` (JSON object string — use `jsonencode()`)                                                  |
-| `alertmanager` | `url`, optional `auth_method` (`none`, `basic_auth`, `bearer`), `username`, `password`, `token`. Credential fields required depend on `auth_method`. |
-| `incidentio`   | `url`, `api_key`                                                                                                     |
+Type-specific fields per resource:
+
+| Resource                         | Fields                                                                                                                           |
+|----------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| `uptrace_slack_channel`          | `auth_method` (`webhook` or `token`), `webhook_url`, `token`, `channel`. Fields required depend on `auth_method`.                |
+| `uptrace_google_chat_channel`    | `webhook_url`                                                                                                                    |
+| `uptrace_mattermost_channel`     | `webhook_url`                                                                                                                    |
+| `uptrace_teams_channel`          | `webhook_url`                                                                                                                    |
+| `uptrace_pagerduty_channel`      | `routing_key`, `severity` (`critical`, `error`, `warning`, `info`)                                                               |
+| `uptrace_opsgenie_channel`       | `api_key`, `priority` (`P1`–`P5`)                                                                                                |
+| `uptrace_telegram_channel`       | `chat_id` (int64)                                                                                                                |
+| `uptrace_pushover_channel`       | `token`, `user_key`; optional `priority` (int, -2 to 2), `sound`                                                                 |
+| `uptrace_webhook_channel`        | `url`; optional `payload` (JSON object string — use `jsonencode()`)                                                              |
+| `uptrace_alertmanager_channel`   | `url`; optional `auth_method` (`none`, `basic_auth`, `bearer`), `username`, `password`, `token`. Credential fields required depend on `auth_method`. |
+| `uptrace_incidentio_channel`     | `url`, `api_key`                                                                                                                 |
+| `uptrace_servicenow_channel`     | `url`, `username`, `password`; optional `category`, `subcategory`, `impact` (`1`-`3`), `urgency` (`1`-`3`), `severity` (`1`-`5`), `caller_id`, `group`, `assigned_to`, `opened_by`, `notify` (`1` or `2`), `due_date` |
+
+Import each resource with `<project_id>:<channel_id>`.
 
 ### uptrace_error_monitor / uptrace_metric_monitor
 
@@ -206,7 +208,7 @@ Shared fields (both resources):
 | trend_agg_func            | string            | no       | Defaults to `sum`. One of `sum`, `avg`, `median`, `last`.                                           |
 | trend_sensitivity         | string            | no       | Defaults to `medium`. One of `low`, `medium`, `high`.                                               |
 | team_ids                  | set(string)       | no       | Team IDs to notify when the monitor fires.                                                          |
-| channel_ids               | set(string)       | no       | Notification channel IDs (`uptrace_notification_channel.id`). No `tonumber()` wrapper needed.       |
+| channel_ids               | set(string)       | no       | Notification channel IDs (e.g. `uptrace_slack_channel.x.id`). No `tonumber()` wrapper needed.       |
 | id                        | string            | computed |                                                                                                     |
 | status                    | string            | computed | One of `active`, `paused`, `firing`, `no_data`, `disabled`.                                         |
 

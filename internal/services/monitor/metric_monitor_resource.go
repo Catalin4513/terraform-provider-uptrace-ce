@@ -78,11 +78,12 @@ func (r *MetricMonitorResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	projectID, err := client.ParseProjectID(plan.ProjectID.ValueString())
+	projectID64, err := strconv.ParseUint(plan.ProjectID.ValueString(), 10, 32)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project_id", err.Error())
 		return
 	}
+	projectID := uint32(projectID64)
 
 	body, diags := buildMetricCreateBody(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -118,11 +119,12 @@ func (r *MetricMonitorResource) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 
-	projectID, err := client.ParseProjectID(state.ProjectID.ValueString())
+	projectID64, err := strconv.ParseUint(state.ProjectID.ValueString(), 10, 32)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project_id", err.Error())
 		return
 	}
+	projectID := uint32(projectID64)
 	monitorID, err := strconv.ParseInt(state.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid monitor id", err.Error())
@@ -158,11 +160,12 @@ func (r *MetricMonitorResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	projectID, err := client.ParseProjectID(plan.ProjectID.ValueString())
+	projectID64, err := strconv.ParseUint(plan.ProjectID.ValueString(), 10, 32)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project_id", err.Error())
 		return
 	}
+	projectID := uint32(projectID64)
 	monitorID, err := strconv.ParseInt(plan.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid monitor id", err.Error())
@@ -203,11 +206,12 @@ func (r *MetricMonitorResource) Delete(ctx context.Context, req resource.DeleteR
 		return
 	}
 
-	projectID, err := client.ParseProjectID(state.ProjectID.ValueString())
+	projectID64, err := strconv.ParseUint(state.ProjectID.ValueString(), 10, 32)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid project_id", err.Error())
 		return
 	}
+	projectID := uint32(projectID64)
 	monitorID, err := strconv.ParseInt(state.ID.ValueString(), 10, 64)
 	if err != nil {
 		resp.Diagnostics.AddError("invalid monitor id", err.Error())

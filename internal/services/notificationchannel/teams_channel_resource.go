@@ -1,0 +1,197 @@
+package notificationchannel
+
+import (
+	"context"
+
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/client"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/generated"
+	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/tfutil"
+)
+
+var (
+	_ resource.Resource                   = &TeamsChannelResource{}
+	_ resource.ResourceWithConfigure      = &TeamsChannelResource{}
+	_ resource.ResourceWithImportState    = &TeamsChannelResource{}
+	_ resource.ResourceWithValidateConfig = &TeamsChannelResource{}
+)
+
+type TeamsChannelResource struct {
+	client *client.Client
+}
+
+func NewTeamsChannelResource() resource.Resource {
+	return &TeamsChannelResource{}
+}
+
+type teamsChannelModel struct {
+	ID         types.String `tfsdk:"id"`
+	ProjectID  types.String `tfsdk:"project_id"`
+	Name       types.String `tfsdk:"name"`
+	Status     types.String `tfsdk:"status"`
+	MatchAll   types.Bool   `tfsdk:"match_all"`
+	Condition  types.String `tfsdk:"condition"`
+	Priorities types.List   `tfsdk:"priorities"`
+	MonitorIDs types.Set    `tfsdk:"monitor_ids"`
+
+	WebhookURL types.String `tfsdk:"webhook_url"`
+}
+
+var teamsCRUD = channelCRUD[teamsChannelModel]{
+	TypeName:  "teams_channel",
+	ProjectID: func(m *teamsChannelModel) types.String { return m.ProjectID },
+	ID:        func(m *teamsChannelModel) types.String { return m.ID },
+	Name:      func(m *teamsChannelModel) types.String { return m.Name },
+	Build:     buildTeamsRequest,
+	Apply:     applyTeamsToModel,
+}
+
+func (r *TeamsChannelResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_teams_channel"
+}
+
+func (r *TeamsChannelResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+	attrs := sharedAttributes()
+	attrs["webhook_url"] = schema.StringAttribute{
+		Required:    true,
+		Sensitive:   true,
+		Description: "Microsoft Teams webhook URL.",
+	}
+	resp.Schema = schema.Schema{
+		Description: "Manages an Uptrace Microsoft Teams notification channel.",
+		Attributes:  attrs,
+	}
+}
+
+func (r *TeamsChannelResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	r.client = tfutil.FromProviderData[client.Client](req.ProviderData, &resp.Diagnostics)
+}
+
+func (r *TeamsChannelResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var cfg teamsChannelModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	validateMatchAllRule(cfg.MatchAll, cfg.MonitorIDs, &resp.Diagnostics)
+}
+
+func (r *TeamsChannelResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan teamsChannelModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(channelCreate(ctx, r.client, &plan, teamsCRUD)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+func (r *TeamsChannelResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state teamsChannelModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	remove, diags := channelRead(ctx, r.client, &state, teamsCRUD)
+	resp.Diagnostics.Append(diags...)
+	if remove {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+}
+
+func (r *TeamsChannelResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan teamsChannelModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(channelUpdate(ctx, r.client, &plan, teamsCRUD)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+func (r *TeamsChannelResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state teamsChannelModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(channelDelete(ctx, r.client, &state, teamsCRUD)...)
+}
+
+// ImportState accepts "<project_id>:<channel_id>".
+func (r *TeamsChannelResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	tfutil.ImportStateCompoundID(ctx, req, resp,
+		tfutil.ImportField{Name: "project_id", Parse: tfutil.ParseUint32},
+		tfutil.ImportField{Name: "channel_id", Parse: tfutil.ParseInt64},
+	)
+}
+
+func buildTeamsRequest(ctx context.Context, m *teamsChannelModel) (*generated.NotificationChannelRequest, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	body := &generated.NotificationChannelRequest{Type: generated.NotificationChannelRequestTypeTeams}
+	diags.Append(buildSharedRequest(ctx, sharedFields{
+		Name: &m.Name, MatchAll: &m.MatchAll, Condition: &m.Condition,
+		Priorities: &m.Priorities, MonitorIDs: &m.MonitorIDs,
+	}, body)...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	oneOf := &generated.NotificationChannelRequest_Params_OneOf{}
+	if err := oneOf.FromTeamsParams(generated.TeamsParams{
+		WebhookURL: m.WebhookURL.ValueString(),
+	}); err != nil {
+		diags.AddError("failed to set teams params", err.Error())
+		return nil, diags
+	}
+	body.Params = generated.NotificationChannelRequest_Params{NotificationChannelRequest_Params_OneOf: oneOf}
+
+	return body, diags
+}
+
+func applyTeamsToModel(ctx context.Context, ch *generated.NotificationChannel, dst *teamsChannelModel) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	rejectChannelType(generated.Teams, ch, &diags)
+	if diags.HasError() {
+		return diags
+	}
+
+	diags.Append(applyShared(ctx, ch, sharedFields{
+		ID: &dst.ID, Name: &dst.Name, Status: &dst.Status,
+		MatchAll: &dst.MatchAll, Condition: &dst.Condition,
+		Priorities: &dst.Priorities, MonitorIDs: &dst.MonitorIDs,
+	})...)
+	if diags.HasError() {
+		return diags
+	}
+
+	if ch.Params.NotificationChannel_Params_OneOf == nil {
+		dst.WebhookURL = tfutil.PreferPrior(dst.WebhookURL, types.StringNull())
+		return diags
+	}
+	p, err := ch.Params.NotificationChannel_Params_OneOf.AsTeamsParams()
+	if err != nil {
+		diags.AddWarning("failed to decode teams params", err.Error())
+		return diags
+	}
+	dst.WebhookURL = tfutil.PreserveIfEmpty(p.WebhookURL, dst.WebhookURL)
+
+	return diags
+}
