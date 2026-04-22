@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/require"
 
@@ -105,6 +106,11 @@ func TestBuildSharedRequest_monitorIDsInvalidIDEmitsDiagnostic(t *testing.T) {
 		Priorities: &priorities, MonitorIDs: &badIDs,
 	}, body)
 	require.True(t, diags.HasError(), "non-numeric monitor_id must emit a diagnostic")
+	require.Len(t, diags, 1)
+	require.Equal(t, "invalid monitor_id", diags[0].Summary())
+	attrDiag, ok := diags[0].(diag.DiagnosticWithPath)
+	require.True(t, ok, "invalid monitor_id diagnostic must be attributed to monitor_ids")
+	require.True(t, path.Root("monitor_ids").Equal(attrDiag.Path()))
 }
 
 func TestBuildSharedRequest_prioritiesRoundTrip(t *testing.T) {

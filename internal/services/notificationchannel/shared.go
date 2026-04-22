@@ -2,6 +2,7 @@ package notificationchannel
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -172,7 +173,11 @@ func buildSharedRequest(ctx context.Context, f sharedFields, body *generated.Not
 		for _, id := range monitorIDs {
 			v, err := strconv.ParseInt(id.ValueString(), 10, 64)
 			if err != nil {
-				diags.AddError("invalid monitor_id", err.Error())
+				diags.AddAttributeError(
+					path.Root("monitor_ids"),
+					"invalid monitor_id",
+					fmt.Sprintf("expected a decimal integer, got %q: %s", id.ValueString(), err.Error()),
+				)
 				return diags
 			}
 			body.MonitorIds = append(body.MonitorIds, v)
