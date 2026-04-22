@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
@@ -78,14 +77,4 @@ type httpDoerAdapter struct {
 
 func (a *httpDoerAdapter) Do(ctx context.Context, req *http.Request) (*http.Response, error) {
 	return a.client.Do(req.WithContext(ctx))
-}
-
-// ParseProjectID parses a string project ID into the uint32 width used by the
-// Uptrace API.
-func ParseProjectID(s string) (uint32, error) {
-	v, err := strconv.ParseUint(s, 10, 32)
-	if err != nil {
-		return 0, err
-	}
-	return uint32(v), nil
 }
