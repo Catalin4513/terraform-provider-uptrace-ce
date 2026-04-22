@@ -15,11 +15,12 @@ import (
 	"github.com/catalin4513/terraform-provider-uptrace-ce/internal/testutil"
 )
 
-// teamUserPreCheck gates the acc tests on a UPTRACE_TEST_ORG_USER_ID env var.
-// There's no API to create an org user, so tests require a pre-existing one.
+// teamUserPreCheck reads and validates UPTRACE_TEST_ORG_USER_ID. Its value
+// is interpolated into the HCL config so it must run before resource.Test;
+// the helper uses only t.Skip (not t.Fatal), which is safe when TF_ACC is
+// unset. UPTRACE_ENDPOINT/TOKEN checks stay in the standard TestCase.PreCheck.
 func teamUserPreCheck(t *testing.T) string {
 	t.Helper()
-	testutil.PreCheck(t)
 	v := os.Getenv("UPTRACE_TEST_ORG_USER_ID")
 	if v == "" {
 		t.Skip("UPTRACE_TEST_ORG_USER_ID must be set to run uptrace_team_user acceptance tests")
@@ -92,6 +93,7 @@ func TestAccTeamUser_basic(t *testing.T) {
 	orgUserID := teamUserPreCheck(t)
 
 	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
 		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
 		CheckDestroy:             testAccCheckTeamUserDestroy(t),
 		Steps: []resource.TestStep{
@@ -126,6 +128,7 @@ func TestAccTeamUser_disappearsOutOfBand(t *testing.T) {
 	var orgIDAttr, teamIDAttr, orgUserIDAttr string
 
 	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testutil.PreCheck(t) },
 		ProtoV6ProviderFactories: testutil.ProtoV6ProviderFactories,
 		CheckDestroy:             testAccCheckTeamUserDestroy(t),
 		Steps: []resource.TestStep{
