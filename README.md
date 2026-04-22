@@ -158,6 +158,53 @@ Manages an ingest token for an Uptrace project.
 
 Import with `<project_id>:<token_id>`.
 
+### uptrace_team / uptrace_team_project / uptrace_team_user
+
+Teams group users for project-scoped access control within an organization. Teams are a Premium feature; the backend returns `403` for unlicensed organizations.
+
+`uptrace_team` manages the team itself. `uptrace_team_project` and `uptrace_team_user` attach projects and users to a team; each is a separate membership resource with the composite identity `(team_id, project_id)` or `(team_id, org_user_id)`.
+
+#### uptrace_team
+
+Manages a team within an organization.
+
+| Field      | Type   | Required | Note                                                                                   |
+|------------|--------|----------|----------------------------------------------------------------------------------------|
+| org_id     | string | yes      | Forces replacement on change.                                                          |
+| name       | string | yes      | Updatable. 1–255 characters.                                                           |
+| perm_level | string | no       | Updatable. One of `none`, `view`, `edit`, `admin`. Computed when omitted — the backend fills the default (currently `view`). Removing the attribute preserves the current value; it cannot be cleared back to null via Terraform. |
+| id         | string | computed |                                                                                        |
+
+Import with `<org_id>:<team_id>`.
+
+#### uptrace_team_project
+
+Grants a team access to a project. Idempotent: creating twice is a no-op server-side. There is no update — changing any field forces replacement.
+
+| Field      | Type   | Required | Note                                         |
+|------------|--------|----------|----------------------------------------------|
+| org_id     | string | yes      | Forces replacement on change.                |
+| team_id    | string | yes      | Forces replacement on change.                |
+| project_id | string | yes      | Forces replacement on change.                |
+| id         | string | computed | Equals `project_id`. Unique within the team. |
+
+Import with `<org_id>:<team_id>:<project_id>`.
+
+#### uptrace_team_user
+
+Adds an organization user to a team. Idempotent. There is no update — changing any field forces replacement.
+
+`org_user_id` is the ID of the OrgUser record linking the user to the organization (not the User ID). The API does not expose a way to create OrgUsers; invite users through the Uptrace UI first, then reference the resulting `org_user_id` here.
+
+| Field       | Type   | Required | Note                                             |
+|-------------|--------|----------|--------------------------------------------------|
+| org_id      | string | yes      | Forces replacement on change.                    |
+| team_id     | string | yes      | Forces replacement on change.                    |
+| org_user_id | string | yes      | Forces replacement on change.                    |
+| id          | string | computed | Equals `org_user_id`. Unique within the team.    |
+
+Import with `<org_id>:<team_id>:<org_user_id>`.
+
 ### Notification channels
 
 Each notification-channel type is its own resource. All resources share the same top-level fields; the type-specific fields differ per resource.

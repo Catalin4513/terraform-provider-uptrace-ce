@@ -174,6 +174,14 @@ type UpdateOrgBudgetBody = OrgUpdateBudgetRequest
 
 type CreateProjectBody = ProjectCreateRequest
 
+type CreateTeamBody = TeamCreateRequest
+
+// UpdateTeamBody Omitting or sending an empty `name` preserves the existing name. Omitting `permLevel` clears it to null.
+type UpdateTeamBody = TeamUpdateRequest
+
+// AddTeamProjectBody Request body for adding a project to a team. A non-empty JSON body is required so the server can decode it. The `permLevel` field is accepted but currently ignored by the backend.
+type AddTeamProjectBody = TeamProjectAddRequest
+
 type UpdateProjectBody = ProjectCreateRequest
 
 type CreateProjectTokenBody = ProjectTokenCreateRequest
